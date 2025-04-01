@@ -7,7 +7,6 @@
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="library" name="mariadb-java-client-3.5.2" level="project" />
     <orderEntry type="library" name="mysql-driver" level="project" />
     <orderEntry type="module-library">
       <library>
@@ -18,29 +17,14 @@
         <SOURCES />
       </library>
     </orderEntry>
+    <orderEntry type="library" name="lib" level="project" />
     <orderEntry type="module-library">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/Downloads/mariadb-java-client-3.5.2.jar!/" />
+          <root url="jar://$USER_HOME$/Downloads/release-jars/material-ui-swing-1.1.2-with-dependencies.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES />
-      </library>
-    </orderEntry>
-    <orderEntry type="module-library">
-      <library>
-        <CLASSES>
-          <root url="file:///lib/jvm/java-23-openjfx/lib" />
-        </CLASSES>
-        <JAVADOC />
-        <NATIVE>
-          <root url="file:///lib/jvm/java-23-openjfx/lib" />
-        </NATIVE>
-        <SOURCES>
-          <root url="file:///lib/jvm/java-23-openjfx/lib" />
-        </SOURCES>
-        <jarDirectory url="file:///lib/jvm/java-23-openjfx/lib" recursive="false" />
-        <jarDirectory url="file:///lib/jvm/java-23-openjfx/lib" recursive="false" type="SOURCES" />
       </library>
     </orderEntry>
   </component>
