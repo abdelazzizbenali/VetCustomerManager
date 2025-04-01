@@ -631,6 +631,7 @@ class TransactionPanel extends JPanel {
     }
 }
 class DailyUsagePanel extends JPanel {
+    JTabbedPane tabbedPane = new JTabbedPane();
     private JTable todayTable;
     private DefaultTableModel todayModel;
     private JTable historyTable;
@@ -693,7 +694,6 @@ class DailyUsagePanel extends JPanel {
             }
         });
         historyPanel.add(new JScrollPane(historyTable), BorderLayout.CENTER);
-        JTabbedPane tabbedPane = new JTabbedPane();
         tabbedPane.insertTab("Today Transactions", new ImageIcon(), todayPanel, "Transactions happened today", 0);
         tabbedPane.insertTab("Transaction's History", new ImageIcon(), historyPanel, "Transaction's history", 1);
         statusLabel = new JLabel(" Ready");
@@ -800,8 +800,11 @@ class DailyUsagePanel extends JPanel {
         }
     }
     public void refreshData() {
-        loadTodayData();
-        loadHistoryData();
+        if (tabbedPane.getSelectedIndex() == 0) {
+            loadTodayData();
+        } else if(tabbedPane.getSelectedIndex() == 1) {
+            loadHistoryData();
+        }
     }
     private void showError(String message) {
         JOptionPane.showMessageDialog(this, message, "Transaction Error", JOptionPane.ERROR_MESSAGE);
