@@ -1,6 +1,8 @@
 import mdlaf.MaterialLookAndFeel;
 import mdlaf.themes.MaterialOceanicTheme;
 import org.jdesktop.swingx.JXDatePicker;
+import org.jdesktop.swingx.JXTitledPanel;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
@@ -8,16 +10,17 @@ import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
+import java.io.File;
 import java.sql.*;
+import java.sql.Date;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
+import java.util.*;
 import java.lang.Object;
+import java.util.List;
+
 /**
  **     Author: Parent: by AAB
  **/
@@ -87,7 +90,7 @@ class DatabaseConnector {
                     "  m_id INT PRIMARY KEY AUTO_INCREMENT," +
                     "  m_name VARCHAR(100) NOT NULL," +
                     "  m_type VARCHAR(100) NOT NULL" +
-                    ")");
+                    ")ENGINE=InnoDB");
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS medicinesInfo (" +
                     "  m_id INT PRIMARY KEY," +
                     "  m_size DECIMAL(10,2) NOT NULL," +
@@ -100,13 +103,13 @@ class DatabaseConnector {
                     "  m_description TEXT," +
                     "  is_deleted TINYINT(1) DEFAULT 0," +
                     "  FOREIGN KEY (m_id) REFERENCES medicines(m_id) ON DELETE CASCADE" +
-                    ")");
+                    ")ENGINE=InnoDB");
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS clients (" +
                     "  client_id INT PRIMARY KEY AUTO_INCREMENT," +
                     "  name VARCHAR(100) NOT NULL," +
                     "  phone VARCHAR(20)," +
                     "  clientDescription TEXT" +
-                    ")");
+                    ")ENGINE=InnoDB");
             stmt.executeUpdate("INSERT IGNORE INTO clients (client_id, name) VALUES(-1, '[UNKNOWN CLIENT]')");
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS transactions (" +
                     "  transaction_id INT PRIMARY KEY AUTO_INCREMENT," +
@@ -118,9 +121,18 @@ class DatabaseConnector {
                     "  type VARCHAR(512)," +
                     "  description TEXT," +
                     "  payer BOOLEAN NOT NULL," +
+                    "  is_deleted TINYINT(1) DEFAULT 0," +
                     "  FOREIGN KEY (client_id) REFERENCES clients(client_id) ON DELETE CASCADE," +
                     "  FOREIGN KEY (m_id) REFERENCES medicines(m_id)" +
-                    ")");
+                    ")ENGINE=InnoDB");
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS appointments (" +
+                    "  id int auto_increment primary key," +
+                    "  client_id int," +
+                    "  date timestamp," +
+                    "  is_deleted tinyint(1) DEFAULT 0," +
+                    "  description text," +
+                    "  FOREIGN KEY (client_id) REFERENCES clients(client_id)" +
+                    ")ENGINE=InnoDB");
             stmt.executeUpdate("CREATE PROCEDURE IF NOT EXISTS SellMedicinePartial(" +
                     "    IN medicine_id INT," +
                     "    IN sell_quantity DECIMAL(10,2)" +
@@ -163,9 +175,6 @@ class DatabaseConnector {
     }
 }
 class MainWindow extends JFrame {
-    private final MedicinePanel medicinePanel = new MedicinePanel();
-    private final ClientPanel clientPanel = new ClientPanel();
-    private final DailyUsagePanel dailyUsagePanel = new DailyUsagePanel();
     public MainWindow() {
         initializeUI();
     }
@@ -177,169 +186,254 @@ class MainWindow extends JFrame {
         setSize(1400, 1000);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.LEFT);
-        JLabel label = new JLabel("VetMS by");
-        label.setFont(new Font("Arturo Trial",Font.BOLD,20));
-        label.setForeground(Color.decode("#C7DB9C"));
-        JLabel author = new JLabel("Abd elAzziz");
-        author.setFont(new Font("Las Americas PERSONAL USE",Font.BOLD,16));
-        author.setForeground(Color.WHITE);
-        tabbedPane.insertTab("Daily Usage", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/home.png"))),dailyUsagePanel,"Adding daily transaction here.",0);
-        tabbedPane.insertTab("Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))),clientPanel,"Adding, editing and deleting client list here..",1);
-        tabbedPane.insertTab("Medicine Stock", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/medicine.png"))),medicinePanel,"Updating medicine stock here..",2);
-        JPanel aboutPanel = new JPanel();
-        aboutPanel.add(label);
-        aboutPanel.add(author);
-        // add(aboutPanel, BorderLayout.NORTH);
+        JTabbedPane tabbedPane = new JTabbedPane(SwingConstants.LEFT);
+        tabbedPane.insertTab("Daily Usage", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/home.png"))), new DailyUsagePanel(), "Adding daily transaction here.", 0);
+        tabbedPane.insertTab("Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))), new ClientPanel(), "Adding, editing and deleting client list here.", 1);
+        tabbedPane.insertTab("Medicine Stock", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/medicine.png"))), new MedicinePanel(), "Updating medicine stock here.", 2);
+        tabbedPane.insertTab("Appointments", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/calendar.png"))), new AppointmentPanel(), "Adding clients appointment.", 3);
+        tabbedPane.insertTab("Settings", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/reglage.png"))), new SettingPanel(), "Change the settings bout this program.", 4);
         add(tabbedPane, BorderLayout.CENTER);
     }
 }
-class MedicinePanel extends JPanel {
-    private JTable dataTable;
-    private DefaultTableModel tableModel;
+
+class DailyUsagePanel extends JPanel {
+    JTabbedPane tabbedPane = new JTabbedPane();
+    private JTable todayTable;
+    private DefaultTableModel todayModel;
+    private JTable historyTable;
+    private DefaultTableModel historyModel;
     private JLabel statusLabel;
-    private JTextField searchField;
-    public MedicinePanel() {
+
+    public DailyUsagePanel() {
         initializeUI();
-        loadData();
+        refreshData();
     }
     private void initializeUI() {
         setLayout(new BorderLayout());
-        String[] columnNames = {"ID", "Medicine Name", "Size(ml)", "Type", "Buy Price(DA)", "Sell Price(DA)", "Expiry Date", "Stock"};
-        tableModel = new DefaultTableModel(columnNames, 0) {
+        JPanel todayPanel = new JPanel(new BorderLayout());
+        todayModel = new DefaultTableModel(new String[]{"ID", "Time", "Client", "Medicine", "Quantity", "Amount", "Type", "Description", "Payed"}, 0) {
             @Override
-            public boolean isCellEditable(int row, int column) {
+            public boolean isCellEditable(int row, int col) {
                 return false;
             }
             @Override
-            public Class<?> getColumnClass(int columnIndex) {
-                return switch (columnIndex) {
-                    case 0, 7 -> Integer.class;
-                    case 2, 4, 5 -> Double.class;
+            public Class<?> getColumnClass(int column) {
+                return switch (column) {
+                    case 0 -> Integer.class;
+                    case 1 -> LocalDate.class;
+                    case 4, 5 -> Double.class;
+                    case 8 -> Boolean.class;
                     default -> String.class;
                 };
             }
         };
-        searchField = new JTextField(20);
-        dataTable = new JTable(tableModel);
-        dataTable.setAutoCreateRowSorter(true);
-        dataTable.removeColumn(dataTable.getColumnModel().getColumn(0));
-        dataTable.setRowMargin(1);
-        dataTable.setShowHorizontalLines(true);
-        JScrollPane scrollPane = new JScrollPane(dataTable);
-        JToolBar toolBar = new JToolBar();
-        toolBar.setFloatable(false);
-        searchField.addActionListener(_ -> refreshData());
-        searchField.getDocument().addDocumentListener(new DocumentListener() {
+        todayTable = new JTable(todayModel);
+        todayTable.removeColumn(todayTable.getColumnModel().getColumn(0));
+        todayTable.setRowMargin(1);
+        JToolBar todayToolbar = new JToolBar();
+        addButton(todayToolbar, "Add", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/add.png"))), _ -> showAddDialog());
+        addButton(todayToolbar, "Delete", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/delete.png"))), _ -> deleteTodayTransactions());
+        addButton(todayToolbar, "Set payed", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/coin.png"))), _ -> setTransactionsPayed());
+        addButton(todayToolbar, "Refresh", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/refresh.png"))), _ -> refreshData());
+        todayPanel.add(todayToolbar, BorderLayout.NORTH);
+        todayPanel.add(new JScrollPane(todayTable), BorderLayout.CENTER);
+        JPanel historyPanel = new JPanel(new BorderLayout());
+        historyModel = new DefaultTableModel(new String[]{"Date", "Total Transactions", "Total Amount"}, 0) {
             @Override
-            public void insertUpdate(DocumentEvent e) {
-                refreshData();
+            public boolean isCellEditable(int row, int col) {
+                return false;
             }
+
             @Override
-            public void removeUpdate(DocumentEvent e) {
-                refreshData();
+            public Class<?> getColumnClass(int column) {
+                return switch (column) {
+                    case 0 -> LocalDate.class;
+                    case 1 -> Integer.class;
+                    case 2 -> Double.class;
+                    default -> Object.class;
+                };
             }
-            @Override
-            public void changedUpdate(DocumentEvent e) {
-                refreshData();
+        };
+        historyTable = new JTable(historyModel);
+        historyTable.setRowMargin(1);
+        historyTable.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    int row = historyTable.rowAtPoint(e.getPoint());
+                    LocalDate date = (LocalDate) historyModel.getValueAt(row, 0);
+                    showDateTransactions(date);
+                }
             }
         });
-        addButton(toolBar, "Add", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/add.png"))), "Add new medicine", this::showAddDialog, KeyEvent.VK_ADD);
-        addButton(toolBar, "Edit", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/edit.png"))), "Edit selected", this::showEditDialog, KeyEvent.VK_E);
-        addButton(toolBar, "Delete", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/delete.png"))), "Delete selected", this::deleteMedicines, KeyEvent.VK_MINUS);
-        addButton(toolBar, "Refresh", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/refresh.png"))), "Refresh data", _ -> refreshData(), KeyEvent.VK_F1);
-        toolBar.add(new JLabel("   Search :   ")).setFont(new Font("DejaVu",Font.BOLD,20));
-        toolBar.add(searchField,BorderLayout.WEST);
+        historyPanel.add(new JScrollPane(historyTable), BorderLayout.CENTER);
+        tabbedPane.insertTab("Today Transactions", new ImageIcon(), todayPanel, "Transactions happened today", 0);
+        tabbedPane.insertTab("Transaction's History", new ImageIcon(), historyPanel, "Transaction's history", 1);
         statusLabel = new JLabel(" Ready");
-        statusLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
         statusLabel.setBackground(new Color(0, 0, 0));
         statusLabel.setForeground(Color.WHITE);
+        statusLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
         statusLabel.setOpaque(true);
         statusLabel.setFont(new Font("DejaVu",Font.PLAIN,18));
-        add(toolBar, BorderLayout.NORTH);
-        add(scrollPane, BorderLayout.CENTER);
+        add(tabbedPane, BorderLayout.CENTER);
         add(statusLabel, BorderLayout.SOUTH);
     }
-    private void addButton(JToolBar bar, String text, ImageIcon icon, String tooltip, ActionListener action, int shortKey) {
+
+    private void addButton(JToolBar bar, String text, ImageIcon icon, ActionListener action) {
         JButton btn = new JButton(text);
-        btn.setToolTipText(tooltip);
         btn.addActionListener(action);
         btn.setIcon(icon);
         btn.setIconTextGap(15);
-        btn.setFont(new Font("DejaVu",Font.PLAIN,18));
+        btn.setFont(new Font("DejaVu Bold", Font.PLAIN, 18));
         btn.setPreferredSize(new Dimension(140,50));
-        btn.setMnemonic(shortKey);
         bar.addSeparator(new Dimension(10,0));
         bar.add(btn);
         bar.addSeparator(new Dimension(10,0));
     }
-    private void loadData() {
-        String searchTerm = searchField.getText();
+
+    private void loadTodayData() {
         try {
-            ResultSet rs;
-            if (searchTerm.isEmpty()) {
-                rs = MedicineDAO.getAllMedicines();
-            } else {
-                rs = MedicineDAO.searchMedicinesByName(searchTerm);
-            }
-            tableModel.setRowCount(0);
+            todayModel.setRowCount(0);
+            ResultSet rs = DailyUsageDAO.getTodaysTransactions();
             while (rs.next()) {
-                Object[] row = {
-                        rs.getInt("m_id"),
+                todayModel.addRow(new Object[]{
+                        rs.getInt("transaction_id"),
+                        rs.getTimestamp("date").toLocalDateTime().toLocalTime(),
+                        rs.getString("name"),
                         rs.getString("m_name"),
-                        rs.getDouble("m_size"),
-                        rs.getString("m_type"),
-                        rs.getDouble("m_buyPrice"),
-                        rs.getDouble("m_sellPrice"),
-                        rs.getDate("m_expiryDate"),
-                        rs.getInt("m_amount")
-                };
-                tableModel.addRow(row);
+                        rs.getDouble("q_sold"),
+                        rs.getDouble("amount"),
+                        rs.getString("type"),
+                        rs.getString("description"),
+                        rs.getBoolean("payer")
+                });
             }
-            statusLabel.setText("Loaded " + tableModel.getRowCount() + " medicines");
-        } catch (SQLException ex) {
-            showError("Search or Load failed: " + ex.getMessage());
+            statusLabel.setText("Loaded " + todayModel.getRowCount() + " transaction.");
+        } catch (SQLException e) {
+            showError("Error loading today's data: " + e.getMessage());
         }
     }
-    private void showAddDialog(ActionEvent e) {
-        new MedicineDialog(null, "Add Medicine", -1).setVisible(true);
-        refreshData();
-    }
-    private void showEditDialog(ActionEvent e) {
-        int viewRow = dataTable.getSelectedRow();
-        if (viewRow == -1) {
-            showError("Please select a medicine to edit");
-            return;
+
+    private void loadHistoryData() {
+        try {
+            historyModel.setRowCount(0);
+            ResultSet rs = DailyUsageDAO.getDailySummary();
+            while (rs.next()) {
+                historyModel.addRow(new Object[]{
+                        rs.getDate("date").toLocalDate()/*.format(DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy", Locale.FRENCH))*/,
+                        rs.getInt("transaction_count"),
+                        rs.getDouble("total_amount")
+                });
+            }
+            statusLabel.setText("Loaded " + historyModel.getRowCount() + " date.");
+        } catch (SQLException e) {
+            showError("Error loading history: " + e.getMessage());
         }
-        int modelRow = dataTable.convertRowIndexToModel(viewRow);
-        int id = (int) tableModel.getValueAt(modelRow, 0);
-        new MedicineDialog(null, "Edit Medicine", id).setVisible(true);
-        refreshData();
     }
-    private void deleteMedicines(ActionEvent e) {
-        int[] row = dataTable.getSelectedRows();
+
+    private void showDateTransactions(LocalDate date) {
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this),
+                "Transactions for " + date.format(DateTimeFormatter.ISO_DATE), true);
+        dialog.add(new DailyTransactionsPanel(date));
+        dialog.pack();
+        dialog.setSize(800, 600);
+        dialog.setVisible(true);
+    }
+
+    private void deleteTodayTransactions() {
+        int[] row = todayTable.getSelectedRows();
         if (row.length == 0) {
-            showError("Select at least one medicine.");
+            showError("Select at least one transaction.");
             return;
         }
-        int confirm = JOptionPane.showConfirmDialog(this, "Delete selected medicines ? ", "Confirm Delete", JOptionPane.YES_NO_OPTION);
+        int confirm = JOptionPane.showConfirmDialog(this, "Delete selected transactions ? ", "Confirm Delete", JOptionPane.YES_NO_OPTION);
         if (confirm == JOptionPane.YES_OPTION) {
             try {
                 for (int n : row) {
-                    MedicineDAO.deleteMedicine((int) tableModel.getValueAt(dataTable.convertRowIndexToModel(n), 0));
+                    DailyUsageDAO.deleteTransaction((int) todayModel.getValueAt(todayTable.convertRowIndexToModel(n), 0));
                 }
                 refreshData();
-            } catch (SQLException ex) {
-                showError("Delete failed: " + ex.getMessage());
+            } catch (SQLException e) {
+                showError("Delete failed: " + e.getMessage());
+            }
+        }
+    }
+
+    private void setTransactionsPayed() {
+        int[] row = todayTable.getSelectedRows();
+        if (row.length == 0) {
+            showError("Select at least one transaction.");
+            return;
+        }
+        int confirm = JOptionPane.showConfirmDialog(this, "Set selected transactions payed ?", "Client pay these", JOptionPane.YES_NO_OPTION);
+        if (confirm == JOptionPane.YES_OPTION) {
+            try {
+                for (int n : row) {
+                    int modelRow = todayTable.convertRowIndexToModel(n);
+                    DailyUsageDAO.setTransactionPayed((int) todayModel.getValueAt(modelRow, 0));
+                }
+                refreshData();
+            } catch (SQLException e) {
+                showError("Setting failed: " + e.getMessage());
             }
         }
     }
     public void refreshData() {
-        loadData();
-        statusLabel.setText("Loaded " + tableModel.getRowCount() + " medicines");
+        loadTodayData();
+        loadHistoryData();
     }
     private void showError(String message) {
-        JOptionPane.showMessageDialog(this, message, "Medicine Error", JOptionPane.ERROR_MESSAGE);
+        JOptionPane.showMessageDialog(this, message, "Transaction Error", JOptionPane.ERROR_MESSAGE);
+    }
+
+    private void showAddDialog() {
+        new DailyUsageDialog(null).setVisible(true);
+        refreshData();
+    }
+}
+
+class DailyTransactionsPanel extends JPanel {
+    private final LocalDate date;
+    private DefaultTableModel model;
+
+    public DailyTransactionsPanel(LocalDate date) {
+        this.date = date;
+        initializeUI();
+        loadData();
+    }
+
+    private void initializeUI() {
+        setLayout(new BorderLayout());
+        setSize(600, 500);
+        model = new DefaultTableModel(new String[]{"Time", "Client", "Medicine", "Quantity", "Amount", "Type", "Description", "Payed"}, 0);
+        JTable table = new JTable(model);
+        JLabel statusLabel = new JLabel(" Loaded " + model.getRowCount() + " transaction.");
+        statusLabel.setBorder(new EmptyBorder(10, 15, 10, 15));
+        statusLabel.setBackground(new Color(0, 0, 0));
+        statusLabel.setForeground(Color.WHITE);
+        statusLabel.setOpaque(true);
+        statusLabel.setFont(new Font("DejaVu", Font.PLAIN, 18));
+        add(new JScrollPane(table), BorderLayout.CENTER);
+        add(statusLabel, BorderLayout.SOUTH);
+    }
+
+    private void loadData() {
+        try {
+            ResultSet rs = DailyUsageDAO.getTransactionsByDate(date);
+            while (rs.next()) {
+                model.addRow(new Object[]{
+                        rs.getTimestamp("date").toLocalDateTime().toLocalTime(),
+                        rs.getString("name"),
+                        rs.getString("m_name"),
+                        rs.getDouble("q_sold"),
+                        rs.getDouble("amount"),
+                        rs.getString("type"),
+                        rs.getString("description"),
+                        rs.getBoolean("payer")
+                });
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error loading data: " + e.getMessage());
+        }
     }
 }
 class ClientPanel extends JPanel {
@@ -630,229 +724,240 @@ class TransactionPanel extends JPanel {
         JOptionPane.showMessageDialog(this, message, "Transaction Error", JOptionPane.ERROR_MESSAGE);
     }
 }
-class DailyUsagePanel extends JPanel {
-    JTabbedPane tabbedPane = new JTabbedPane();
-    private JTable todayTable;
-    private DefaultTableModel todayModel;
-    private JTable historyTable;
-    private DefaultTableModel historyModel;
+
+class MedicinePanel extends JPanel {
+    private JTable dataTable;
+    private DefaultTableModel tableModel;
     private JLabel statusLabel;
-    public DailyUsagePanel() {
-        initializeUI();
-        refreshData();
-    }
-    private void initializeUI() {
-        setLayout(new BorderLayout());
-        JPanel todayPanel = new JPanel(new BorderLayout());
-        todayModel = new DefaultTableModel(new String[]{"ID", "Time", "Client", "Medicine", "Quantity", "Amount", "Type", "Description", "Payed"}, 0) {
-            @Override
-            public boolean isCellEditable(int row, int col) {
-                return false;
-            }
-            @Override
-            public Class<?> getColumnClass(int column) {
-                return switch (column) {
-                    case 0 -> Integer.class;
-                    case 1 -> LocalDate.class;
-                    case 4, 5 -> Double.class;
-                    case 8 -> Boolean.class;
-                    default -> String.class;
-                };
-            }
-        };
-        todayTable = new JTable(todayModel);
-        todayTable.removeColumn(todayTable.getColumnModel().getColumn(0));
-        todayTable.setRowMargin(1);
-        JToolBar todayToolbar = new JToolBar();
-        addButton(todayToolbar, "Add", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/add.png"))), _ -> showAddDialog());
-        addButton(todayToolbar, "Delete", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/delete.png"))), _ -> deleteTodayTransactions());
-        addButton(todayToolbar, "Set payed", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/coin.png"))), _ -> setTransactionsPayed());
-        addButton(todayToolbar, "Refresh", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/refresh.png"))), _ -> refreshData());
-        todayPanel.add(todayToolbar, BorderLayout.NORTH);
-        todayPanel.add(new JScrollPane(todayTable), BorderLayout.CENTER);
-        JPanel historyPanel = new JPanel(new BorderLayout());
-        historyModel = new DefaultTableModel(new String[]{"Date", "Total Transactions", "Total Amount"}, 0) {
-            @Override public boolean isCellEditable(int row, int col) { return false; }
-            @Override public Class<?> getColumnClass(int column) {
-                return switch (column) {
-                    case 0 -> LocalDate.class;
-                    case 1 -> Integer.class;
-                    case 2 -> Double.class;
-                    default -> Object.class;
-                };
-            }
-        };
-        historyTable = new JTable(historyModel);
-        historyTable.setRowMargin(1);
-        historyTable.addMouseListener(new MouseAdapter() {
-            public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 2) {
-                    int row = historyTable.rowAtPoint(e.getPoint());
-                    LocalDate date = (LocalDate) historyModel.getValueAt(row, 0);
-                    showDateTransactions(date);
-                }
-            }
-        });
-        historyPanel.add(new JScrollPane(historyTable), BorderLayout.CENTER);
-        tabbedPane.insertTab("Today Transactions", new ImageIcon(), todayPanel, "Transactions happened today", 0);
-        tabbedPane.insertTab("Transaction's History", new ImageIcon(), historyPanel, "Transaction's history", 1);
-        statusLabel = new JLabel(" Ready");
-        statusLabel.setBackground(new Color(0, 0, 0));
-        statusLabel.setForeground(Color.WHITE);
-        statusLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
-        statusLabel.setOpaque(true);
-        statusLabel.setFont(new Font("DejaVu",Font.PLAIN,18));
-        add(tabbedPane, BorderLayout.CENTER);
-        add(statusLabel, BorderLayout.SOUTH);
-    }
-    private void addButton(JToolBar bar, String text, ImageIcon icon, ActionListener action) {
-        JButton btn = new JButton(text);
-        btn.addActionListener(action);
-        btn.setIcon(icon);
-        btn.setIconTextGap(15);
-        btn.setFont(new Font("DejaVu Bold",Font.PLAIN,18));
-        btn.setPreferredSize(new Dimension(140,50));
-        bar.addSeparator(new Dimension(10,0));
-        bar.add(btn);
-        bar.addSeparator(new Dimension(10,0));
-    }
-    private void loadTodayData() {
-        try {
-            todayModel.setRowCount(0);
-            ResultSet rs = DailyUsageDAO.getTodaysTransactions();
-            while (rs.next()) {
-                todayModel.addRow(new Object[]{
-                        rs.getInt("transaction_id"),
-                        rs.getTimestamp("date").toLocalDateTime().toLocalTime(),
-                        rs.getString("name"),
-                        rs.getString("m_name"),
-                        rs.getDouble("q_sold"),
-                        rs.getDouble("amount"),
-                        rs.getString("type"),
-                        rs.getString("description"),
-                        rs.getBoolean("payer")
-                });
-            }
-            statusLabel.setText("Loaded " + todayModel.getRowCount() + " transaction.");
-        } catch (SQLException e) {
-            showError("Error loading today's data: " + e.getMessage());
-        }
-    }
-    private void loadHistoryData() {
-        try {
-            historyModel.setRowCount(0);
-            ResultSet rs = DailyUsageDAO.getDailySummary();
-            while (rs.next()) {
-                historyModel.addRow(new Object[]{
-                        rs.getDate("date").toLocalDate()/*.format(DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy", Locale.FRENCH))*/,
-                        rs.getInt("transaction_count"),
-                        rs.getDouble("total_amount")
-                });
-            }
-            statusLabel.setText("Loaded " + historyModel.getRowCount() + " date.");
-        } catch (SQLException e) {
-            showError("Error loading history: " + e.getMessage());
-        }
-    }
-    private void showDateTransactions(LocalDate date) {
-        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this),
-                "Transactions for " + date.format(DateTimeFormatter.ISO_DATE), true);
-        dialog.add(new DailyTransactionsPanel(date));
-        dialog.pack();
-        dialog.setSize(800, 600);
-        dialog.setVisible(true);
-    }
-    private void deleteTodayTransactions() {
-        int[] row = todayTable.getSelectedRows();
-        if (row.length == 0) {
-            showError("Select at least one transaction.");
-            return;
-        }
-        int confirm = JOptionPane.showConfirmDialog(this, "Delete selected transactions ? ", "Confirm Delete", JOptionPane.YES_NO_OPTION);
-        if (confirm == JOptionPane.YES_OPTION) {
-            try {
-                for (int n : row) {
-                    DailyUsageDAO.deleteTransaction((int) todayModel.getValueAt(todayTable.convertRowIndexToModel(n), 0));
-                }
-                refreshData();
-            } catch (SQLException e) {
-                showError("Delete failed: " + e.getMessage());
-            }
-        }
-    }
-    private void setTransactionsPayed() {
-        int[] row = todayTable.getSelectedRows();
-        if (row.length == 0) {
-            showError("Select at least one transaction.");
-            return;
-        }
-        int confirm = JOptionPane.showConfirmDialog(this, "Set selected transactions payed ?", "Client pay these", JOptionPane.YES_NO_OPTION);
-        if (confirm == JOptionPane.YES_OPTION) {
-            try {
-                for (int n : row) {
-                    int modelRow = todayTable.convertRowIndexToModel(n);
-                    DailyUsageDAO.setTransactionPayed((int) todayModel.getValueAt(modelRow, 0));
-                }
-                refreshData();
-            } catch (SQLException e) {
-                showError("Setting failed: " + e.getMessage());
-            }
-        }
-    }
-    public void refreshData() {
-        if (tabbedPane.getSelectedIndex() == 0) {
-            loadTodayData();
-        } else if(tabbedPane.getSelectedIndex() == 1) {
-            loadHistoryData();
-        }
-    }
-    private void showError(String message) {
-        JOptionPane.showMessageDialog(this, message, "Transaction Error", JOptionPane.ERROR_MESSAGE);
-    }
-    private void showAddDialog() {
-        new DailyUsageDialog(null).setVisible(true);
-        refreshData();
-    }
-}
-class DailyTransactionsPanel extends JPanel {
-    private final LocalDate date;
-    private DefaultTableModel model;
-    public DailyTransactionsPanel(LocalDate date) {
-        this.date = date;
+    private JTextField searchField;
+
+    public MedicinePanel() {
         initializeUI();
         loadData();
     }
     private void initializeUI() {
         setLayout(new BorderLayout());
-        setSize(600, 500);
-        model = new DefaultTableModel(new String[]{"Time", "Client", "Medicine", "Quantity", "Amount", "Type", "Description", "Payed"}, 0);
-        JTable table = new JTable(model);
-        JLabel statusLabel = new JLabel(" Loaded " + model.getRowCount() + " transaction.");
-        statusLabel.setBorder(new EmptyBorder(10, 15, 10, 15));
+        String[] columnNames = {"ID", "Medicine Name", "Size(ml)", "Type", "Buy Price(DA)", "Sell Price(DA)", "Expiry Date", "Stock"};
+        tableModel = new DefaultTableModel(columnNames, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                return switch (columnIndex) {
+                    case 0, 7 -> Integer.class;
+                    case 2, 4, 5 -> Double.class;
+                    default -> String.class;
+                };
+            }
+        };
+        searchField = new JTextField(20);
+        dataTable = new JTable(tableModel);
+        dataTable.setAutoCreateRowSorter(true);
+        dataTable.removeColumn(dataTable.getColumnModel().getColumn(0));
+        dataTable.setRowMargin(1);
+        dataTable.setShowHorizontalLines(true);
+        JScrollPane scrollPane = new JScrollPane(dataTable);
+        JToolBar toolBar = new JToolBar();
+        toolBar.setFloatable(false);
+        searchField.addActionListener(_ -> refreshData());
+        searchField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                refreshData();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                refreshData();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                refreshData();
+            }
+        });
+        addButton(toolBar, "Add", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/add.png"))), "Add new medicine", this::showAddDialog, KeyEvent.VK_ADD);
+        addButton(toolBar, "Edit", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/edit.png"))), "Edit selected", this::showEditDialog, KeyEvent.VK_E);
+        addButton(toolBar, "Delete", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/delete.png"))), "Delete selected", this::deleteMedicines, KeyEvent.VK_MINUS);
+        addButton(toolBar, "Refresh", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/refresh.png"))), "Refresh data", _ -> refreshData(), KeyEvent.VK_F1);
+        toolBar.add(new JLabel("   Search :   ")).setFont(new Font("DejaVu", Font.BOLD, 20));
+        toolBar.add(searchField, BorderLayout.WEST);
+        statusLabel = new JLabel(" Ready");
+        statusLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
         statusLabel.setBackground(new Color(0, 0, 0));
         statusLabel.setForeground(Color.WHITE);
         statusLabel.setOpaque(true);
         statusLabel.setFont(new Font("DejaVu",Font.PLAIN,18));
-        add(new JScrollPane(table), BorderLayout.CENTER);
+        add(toolBar, BorderLayout.NORTH);
+        add(scrollPane, BorderLayout.CENTER);
         add(statusLabel, BorderLayout.SOUTH);
     }
+    private void addButton(JToolBar bar, String text, ImageIcon icon, String tooltip, ActionListener action, int shortKey) {
+        JButton btn = new JButton(text);
+        btn.setToolTipText(tooltip);
+        btn.addActionListener(action);
+        btn.setIcon(icon);
+        btn.setIconTextGap(15);
+        btn.setFont(new Font("DejaVu", Font.PLAIN, 18));
+        btn.setPreferredSize(new Dimension(140,50));
+        btn.setMnemonic(shortKey);
+        bar.addSeparator(new Dimension(10,0));
+        bar.add(btn);
+        bar.addSeparator(new Dimension(10,0));
+    }
     private void loadData() {
+        String searchTerm = searchField.getText();
         try {
-            ResultSet rs = DailyUsageDAO.getTransactionsByDate(date);
+            ResultSet rs;
+            if (searchTerm.isEmpty()) {
+                rs = MedicineDAO.getAllMedicines();
+            } else {
+                rs = MedicineDAO.searchMedicinesByName(searchTerm);
+            }
+            tableModel.setRowCount(0);
             while (rs.next()) {
-                model.addRow(new Object[]{
-                        rs.getTimestamp("date").toLocalDateTime().toLocalTime(),
-                        rs.getString("name"),
+                Object[] row = {
+                        rs.getInt("m_id"),
                         rs.getString("m_name"),
-                        rs.getDouble("q_sold"),
-                        rs.getDouble("amount"),
-                        rs.getString("type"),
-                        rs.getString("description"),
-                        rs.getBoolean("payer")
-                });
+                        rs.getDouble("m_size"),
+                        rs.getString("m_type"),
+                        rs.getDouble("m_buyPrice"),
+                        rs.getDouble("m_sellPrice"),
+                        rs.getDate("m_expiryDate"),
+                        rs.getInt("m_amount")
+                };
+                tableModel.addRow(row);
+            }
+            statusLabel.setText("Loaded " + tableModel.getRowCount() + " medicines");
+        } catch (SQLException ex) {
+            showError("Search or Load failed: " + ex.getMessage());
+        }
+    }
+    private void showAddDialog(ActionEvent e) {
+        new MedicineDialog(null, "Add Medicine", -1).setVisible(true);
+        refreshData();
+    }
+    private void showEditDialog(ActionEvent e) {
+        int viewRow = dataTable.getSelectedRow();
+        if (viewRow == -1) {
+            showError("Please select a medicine to edit");
+            return;
+        }
+        int modelRow = dataTable.convertRowIndexToModel(viewRow);
+        int id = (int) tableModel.getValueAt(modelRow, 0);
+        new MedicineDialog(null, "Edit Medicine", id).setVisible(true);
+        refreshData();
+    }
+    private void deleteMedicines(ActionEvent e) {
+        int[] row = dataTable.getSelectedRows();
+        if (row.length == 0) {
+            showError("Select at least one medicine.");
+            return;
+        }
+        int confirm = JOptionPane.showConfirmDialog(this, "Delete selected medicines ? ", "Confirm Delete", JOptionPane.YES_NO_OPTION);
+        if (confirm == JOptionPane.YES_OPTION) {
+            try {
+                for (int n : row) {
+                    MedicineDAO.deleteMedicine((int) tableModel.getValueAt(dataTable.convertRowIndexToModel(n), 0));
+                }
+                refreshData();
+            } catch (SQLException ex) {
+                showError("Delete failed: " + ex.getMessage());
+            }
+        }
+    }
+    public void refreshData() {
+        loadData();
+        statusLabel.setText("Loaded " + tableModel.getRowCount() + " medicines");
+    }
+    private void showError(String message) {
+        JOptionPane.showMessageDialog(this, message, "Medicine Error", JOptionPane.ERROR_MESSAGE);
+    }
+}
+class AppointmentPanel extends JPanel {
+    public AppointmentPanel() {
+        initializeUI();
+        refreshData();
+    }
+    public void initializeUI() {
+        setBorder(new EmptyBorder(20, 20, 20, 20));
+        setLayout(new GridLayout(5, 7, 5, 5));
+    }
+    public void refreshData() {
+        removeAll();
+        for (int i = 0; i < 35; i++) {
+            loadAppointmentByDate(LocalDate.now().minusDays(3).plusDays(i));
+            int finalI = i;
+            addButton(String.format("<html><center>%s<br>%s</center></html>",
+                            LocalDate.now().minusDays(3).plusDays(i).format(DateTimeFormatter.ofPattern("dd MMMM")), String.join(", ", loadAppointmentByDate(LocalDate.now().minusDays(3).plusDays(i)))),
+                    _ -> showAppointmentDialog(LocalDate.now().minusDays(3).plusDays(finalI)));
+        }
+        revalidate();
+        repaint();
+    }
+    private void addButton(String text, ActionListener action) {
+        JButton btn = new JButton(text);
+        btn.addActionListener(action);
+        btn.setFont(new Font("DejaVu", Font.PLAIN, 20));
+        btn.setForeground(Color.WHITE);
+        add(btn);
+    }
+    private void showAppointmentDialog(LocalDate date) {
+        new AppointmentDialog(this, date, loadAppointmentByDate(date).isEmpty()).setVisible(true);
+        refreshData();
+    }
+    private List<String> loadAppointmentByDate(LocalDate date) {
+        List<String> clients = new ArrayList<>();
+        try {
+            ResultSet rs = AppointmentDAO.getAppointmentByDate(date);
+            while (rs.next()) {
+                clients.add(rs.getString("name"));
             }
         } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Error loading data: " + e.getMessage());
+            showError("Load failed: " + e.getMessage());
+        }
+        return clients;
+    }
+    private void showError(String message) {
+        JOptionPane.showMessageDialog(this, message, "Appointment Error", JOptionPane.ERROR_MESSAGE);
+    }
+}
+class SettingPanel extends JPanel {
+    JFileChooser fileChooser;
+    public SettingPanel() {
+        initializeUI();
+        loadSettings();
+    }
+    public void initializeUI() {
+        setLayout(new GridLayout(0, 2, 5, 5));
+        addButton("Load Data", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/database_add.png"))), "Load data to a specific table in the database.", this::loadFile);
+        addButton("Button text that is coming soon", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/database_add.png"))), "This is another button.", this::loadFile);
+    }
+
+    private void addButton(String text, ImageIcon icon, String tooltip, ActionListener action) {
+        JButton btn = new JButton(text);
+        btn.setLayout(new BorderLayout(20, 20));
+        btn.setSize(new Dimension(35, 35));
+        btn.setToolTipText(tooltip);
+        btn.addActionListener(action);
+        btn.setIcon(icon);
+        btn.setIconTextGap(15);
+        btn.setFont(new Font("DejaVu", Font.PLAIN, 18));
+        btn.setPreferredSize(new Dimension(140, 50));
+        add(btn);
+    }
+
+    public void loadSettings() {
+//        ObjectMapper objectMapper = new ObjectMapper();
+    }
+
+    public void loadFile(ActionEvent e) {
+        fileChooser = new JFileChooser();
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            String path = String.valueOf(new File(fileChooser.getSelectedFile().getAbsolutePath()));
+            System.out.println(path);
         }
     }
 }
@@ -933,7 +1038,6 @@ class MedicineDAO {
         }
     }
     public static void deleteMedicine(int id) throws SQLException {
-        // String sql = "DELETE FROM medicines WHERE m_id = ?";
         String query = "UPDATE medicinesInfo SET is_deleted = 1 WHERE m_id = ?";
         try (Connection conn = DatabaseConnector.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
@@ -988,9 +1092,7 @@ class ClientDAO {
         return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT * FROM clients");
     }
     public static void addClient(String name, String phone, String description) throws SQLException {
-        String sql = "INSERT INTO clients (name, phone, clientDescription) VALUES (?, ?, ?)";
-        try (Connection conn = DatabaseConnector.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
+        try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("INSERT INTO clients (name, phone, clientDescription) VALUES (?, ?, ?)")) {
             stmt.setString(1, name);
             stmt.setString(2, phone);
             stmt.setString(3, description);
@@ -1104,10 +1206,7 @@ class DailyUsageDAO {
     public static ResultSet getTodaysTransactions() throws SQLException {
         Connection conn = DatabaseConnector.getConnection();
         PreparedStatement stmt = conn.prepareStatement(
-                "SELECT t.*, c.name, m.m_name FROM transactions t " +
-                        "JOIN clients c ON t.client_id = c.client_id " +
-                        "JOIN medicines m ON t.m_id = m.m_id " +
-                        "WHERE DATE(t.date) = CURDATE()");
+                "SELECT t.*, c.name, m.m_name FROM transactions t JOIN clients c ON t.client_id = c.client_id JOIN medicines m ON t.m_id = m.m_id WHERE DATE(t.date) = CURDATE()");
         return stmt.executeQuery();
     }
     public static ResultSet getDailySummary() throws SQLException {
@@ -1127,7 +1226,7 @@ class DailyUsageDAO {
     }
     public static void deleteTransaction(int id) throws SQLException {
         try (Connection conn = DatabaseConnector.getConnection();
-             PreparedStatement stmt = conn.prepareStatement("DELETE FROM transactions WHERE transaction_id = ?")) {
+             PreparedStatement stmt = conn.prepareStatement("UPDATE transactions SET is_deleted = 1 WHERE transaction_id = ?")) {
             stmt.setInt(1, id);
             stmt.executeUpdate();
         }
@@ -1136,6 +1235,33 @@ class DailyUsageDAO {
         String sql = "UPDATE transactions SET payer = 1 WHERE transaction_id = ?";
         try (Connection conn = DatabaseConnector.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, trId);
+            stmt.executeUpdate();
+        }
+    }
+}
+
+class AppointmentDAO {
+    public static ResultSet getAppointmentByDate(LocalDate date) throws SQLException {
+        PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("SELECT a.*, c.name FROM appointments a JOIN clients c ON a.client_id = c.client_id WHERE DATE(a.date) = ? AND a.is_deleted = 0");
+        stmt.setDate(1, Date.valueOf(date));
+        return stmt.executeQuery();
+    }
+    public static void addAppointment(int cId, LocalDate date, String description) throws SQLException {
+        try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("INSERT INTO appointments (client_id, date, description, is_deleted) VALUES (?, ?, ?, 0)")) {
+            stmt.setInt(1, cId);
+            stmt.setDate(2, Date.valueOf(date));
+            stmt.setString(3, description);
+            stmt.executeUpdate();
+        }
+    }
+    public static void deleteAppointments(LocalDate date) throws SQLException {
+        try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("UPDATE appointments SET is_deleted = 1 WHERE DATE(date) LIKE '%" + Date.valueOf(date) + "%'")) {
+            stmt.executeUpdate();
+        }
+    }
+
+    public static void setAppointmentDone(LocalDate date) throws SQLException {
+        try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("UPDATE appointments SET is_done = 1 WHERE DATE(date) LIKE '%" + Date.valueOf(date) + "%' AND is_deleted = 0")) {
             stmt.executeUpdate();
         }
     }
@@ -1356,7 +1482,7 @@ class ClientDialog extends JDialog {
     }
 }
 class TransactionDialog extends JDialog {
-    private final JTextField dateField = new JTextField(String.valueOf(LocalDateTime.now()));
+    private final JTextField dateField = new JTextField(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd, hh:mm:ss")));
     private final JComboBox<Medicine> medicineCombo  = new JComboBox<>();
     private final JSpinner quantitySpinner = new JSpinner(new SpinnerNumberModel(0.0, 0, 1000000, 1));
     private final JSpinner amountSpinner = new JSpinner(new SpinnerNumberModel(0.0, 0, 1000000, 100));
@@ -1540,6 +1666,147 @@ class DailyUsageDialog extends JDialog {
             clients.forEach(clientCombo::addItem);
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Error loading medicines: " + e.getMessage());
+        }
+    }
+}
+
+class AppointmentDialog extends JDialog {
+    private final LocalDate date;
+    private final boolean isTaken;
+    private JComboBox<Client> clientCombo;
+    private JTextArea descriptionArea;
+
+    public AppointmentDialog(JPanel parent, LocalDate date, boolean isTaken) {
+        super((Frame) SwingUtilities.getWindowAncestor(parent), true);
+        this.date = date;
+        this.isTaken = isTaken;
+        initializeUI();
+    }
+    private void initializeUI() {
+        setSize(600, 400);
+        setLocationRelativeTo(getOwner());
+        JPanel panel = new JPanel(new BorderLayout(5, 5));
+        panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        if (!isTaken) {
+            panel.setLayout(new GridLayout(2, 0, 5, 5));
+            setTitle("Appointment for " + date);
+            JXTitledPanel namePanel = new JXTitledPanel("Client Name : ");
+            namePanel.setForeground(Color.WHITE);
+            namePanel.setTitleFont(new Font("DejaVu", Font.PLAIN, 22));
+            namePanel.setTitleForeground(Color.WHITE);
+            namePanel.setBackground(Color.WHITE);
+            JXTitledPanel descriptionPanel = new JXTitledPanel("Description : ");
+            descriptionPanel.setForeground(Color.WHITE);
+            descriptionPanel.setTitleFont(new Font("DejaVu", Font.PLAIN, 22));
+            descriptionPanel.setTitleForeground(Color.WHITE);
+            descriptionPanel.setBackground(Color.WHITE);
+            JLabel name = new JLabel();
+            name.setFont(new Font("DejaVu", Font.PLAIN, 20));
+            name.setForeground(Color.WHITE);
+            JLabel description = new JLabel();
+            description.setFont(new Font("DejaVu", Font.PLAIN, 20));
+            description.setForeground(Color.WHITE);
+            try {
+                ResultSet rs = AppointmentDAO.getAppointmentByDate(date);
+                while (rs.next()) {
+                    name.setText(rs.getString("name"));
+                    description.setText(rs.getString("description"));
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            namePanel.add(name);
+            description.add(description);
+            panel.add(namePanel);
+            panel.add(descriptionPanel);
+            JPanel btnPanel = new JPanel();
+            btnPanel.setLayout(new GridLayout(0, 2, 5, 5));
+            btnPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
+            addButton(btnPanel, "Delete", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/delete.png"))), "Deleting this appointment.", _ -> deleteAppointment(date));
+            addButton(btnPanel, "Set Done", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/delete.png"))), "Setting this appointment done.", _ -> setAppointmentDone(date));
+            add(panel, BorderLayout.CENTER);
+            add(btnPanel, BorderLayout.SOUTH);
+        } else {
+            panel.setLayout(new GridLayout(0, 2, 5, 5));
+            setTitle("New appointment for " + date);
+            clientCombo = new JComboBox<>();
+            clientCombo.setRenderer(new DefaultListCellRenderer() {
+                public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                    return super.getListCellRendererComponent(list, (value instanceof Client) ? ((Client) value).getName() : value, index, isSelected, cellHasFocus);
+                }
+            });
+            loadClients();
+            JButton addClientBtn = new JButton("+");
+            addClientBtn.setForeground(Color.WHITE);
+            addClientBtn.setFont(new Font("DejaVu", Font.BOLD, 20));
+            addClientBtn.addActionListener(_ -> {
+                new ClientDialog(null, "Add Client", -1).setVisible(true);
+                loadClients();
+            });
+            descriptionArea = new JTextArea(3, 20);
+            JButton addBtn = new JButton("Add");
+            addBtn.addActionListener(_ -> addAppointment());
+            addBtn.setFont(new Font("DejaVu", Font.PLAIN, 22));
+            addBtn.setOpaque(true);
+            addBtn.setSize(20, 20);
+            panel.add(new JLabel("Client : ")).setFont(new Font("DejaVu", Font.BOLD, 20));
+            panel.add(clientCombo);
+            panel.add(new JLabel("Add client : ")).setFont(new Font("DejaVu", Font.BOLD, 20));
+            panel.add(addClientBtn);
+            panel.add(new JLabel("Description : ")).setFont(new Font("DejaVu", Font.BOLD, 20));
+            panel.add(new JScrollPane(descriptionArea));
+            add(panel, BorderLayout.CENTER);
+            add(addBtn, BorderLayout.SOUTH);
+        }
+    }
+
+    private void addButton(JPanel panel, String title, ImageIcon icon, String tooltip, ActionListener action) {
+        JButton btn = new JButton(title);
+        btn.setToolTipText(tooltip);
+        btn.addActionListener(action);
+        btn.setIcon(icon);
+        btn.setIconTextGap(15);
+        btn.setFont(new Font("DejaVu", Font.PLAIN, 22));
+        panel.add(btn);
+    }
+    private void loadClients() {
+        clientCombo.removeAllItems();
+        try {
+            ClientDAO.getAllClientsAsList().forEach(clientCombo::addItem);
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error loading clients: " + e.getMessage());
+        }
+    }
+
+    public void deleteAppointment(LocalDate date) {
+        try {
+            AppointmentDAO.deleteAppointments(date);
+        } catch (SQLException ex) {
+            throw new RuntimeException(ex);
+        }
+        dispose();
+    }
+
+    public void setAppointmentDone(LocalDate date) {
+        try {
+            AppointmentDAO.setAppointmentDone(date);
+        } catch (SQLException ex) {
+            throw new RuntimeException(ex);
+        }
+        dispose();
+    }
+    private void addAppointment() {
+        Client client = (Client) clientCombo.getSelectedItem();
+        String description = descriptionArea.getText();
+        if (client == null) {
+            JOptionPane.showMessageDialog(this, "Select a client!");
+            return;
+        }
+        dispose();
+        try {
+            AppointmentDAO.addAppointment(client.getId(), date, description);
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error adding appointment: " + e.getMessage());
         }
     }
 }
