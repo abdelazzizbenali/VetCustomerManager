@@ -389,17 +389,14 @@ class DailyUsagePanel extends JPanel {
         refreshData();
     }
 }
-
 class DailyTransactionsPanel extends JPanel {
     private final LocalDate date;
     private DefaultTableModel model;
-
     public DailyTransactionsPanel(LocalDate date) {
         this.date = date;
         initializeUI();
         loadData();
     }
-
     private void initializeUI() {
         setLayout(new BorderLayout());
         setSize(600, 500);
@@ -414,7 +411,6 @@ class DailyTransactionsPanel extends JPanel {
         add(new JScrollPane(table), BorderLayout.CENTER);
         add(statusLabel, BorderLayout.SOUTH);
     }
-
     private void loadData() {
         try {
             ResultSet rs = DailyUsageDAO.getTransactionsByDate(date);
@@ -1321,7 +1317,6 @@ class Client {
 class MedicineDialog extends JDialog {
     private final JTextField nameField = new JTextField();
     private final JSpinner sizeSpinner = new JSpinner();
-    private final JSpinner fullSizeSpinner = new JSpinner();
     private final JComboBox<String> typeField = new JComboBox<>(new String[]{"Anti-Biotiques", "Anti-Inflammatoires", "Anti-Parasitaires", "CMV et Addetifs", "Vaccins", "Anesthesiques", "Accessoires", "Outils", "Desinfectent", "Hormones", "Serum et Fluid"});
     private final JSpinner buySpinner = new JSpinner(new SpinnerNumberModel(0, 0, 100000, 100));
     private final JSpinner sellSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 100000, 100));
@@ -1346,7 +1341,6 @@ class MedicineDialog extends JDialog {
                 if (medicine != null) {
                     nameField.setText(medicine.getName());
                     sizeSpinner.setValue(medicine.getCurrentSize());
-                    fullSizeSpinner.setValue(medicine.getFullSize());
                     typeField.setSelectedItem(medicine.getType());
                     buySpinner.setValue(medicine.getBuyPrice());
                     sellSpinner.setValue(medicine.getSellPrice());
@@ -1361,8 +1355,6 @@ class MedicineDialog extends JDialog {
         formPanel.add(nameField).setFont(new Font("DejaVu",Font.BOLD,20));
         formPanel.add(new JLabel("Medicine Size*:")).setFont(new Font("DejaVu",Font.PLAIN,22));
         formPanel.add(sizeSpinner).setFont(new Font("DejaVu",Font.BOLD,20));
-        formPanel.add(new JLabel("Medicine Full Size*:")).setFont(new Font("DejaVu",Font.PLAIN,22));
-        formPanel.add(fullSizeSpinner).setFont(new Font("DejaVu",Font.BOLD,20));
         formPanel.add(new JLabel("Type*:")).setFont(new Font("DejaVu",Font.PLAIN,22));
         formPanel.add(typeField).setFont(new Font("DejaVu",Font.BOLD,20));
         formPanel.add(new JLabel("Buy Price*:")).setFont(new Font("DejaVu",Font.PLAIN,22));
@@ -1391,7 +1383,6 @@ class MedicineDialog extends JDialog {
             }
             String name = nameField.getText();
             double size = Double.parseDouble(sizeSpinner.getValue().toString());
-            double fulLSize = Double.parseDouble(fullSizeSpinner.getValue().toString());
             String type = Objects.requireNonNull(typeField.getSelectedItem()).toString();
             double buyPrice = Double.parseDouble(buySpinner.getValue().toString());
             double sellPrice = Double.parseDouble(sellSpinner.getValue().toString());
@@ -1400,10 +1391,10 @@ class MedicineDialog extends JDialog {
 
             if (editId == -1) {
                 int id = MedicineDAO.addMedicine(name, type);
-                MedicineDAO.addMedicineInfo(id, size, fulLSize, buyPrice, sellPrice, expiry, amount);
+                MedicineDAO.addMedicineInfo(id, size, size, buyPrice, sellPrice, expiry, amount);
             } else {
                 MedicineDAO.updateMedicine(editId, name, type);
-                MedicineDAO.updateMedicineInfo(editId, size, fulLSize, buyPrice, sellPrice, expiry, amount);
+                MedicineDAO.updateMedicineInfo(editId, size, size, buyPrice, sellPrice, expiry, amount);
             }
             dispose();
         } catch (DateTimeParseException e) {
