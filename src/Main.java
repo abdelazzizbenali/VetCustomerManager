@@ -2,7 +2,6 @@ import mdlaf.MaterialLookAndFeel;
 import mdlaf.themes.MaterialOceanicTheme;
 import org.jdesktop.swingx.JXDatePicker;
 import org.jdesktop.swingx.JXTitledPanel;
-
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
@@ -894,8 +893,6 @@ class AppointmentPanel extends JPanel {
                             LocalDate.now().minusDays(3).plusDays(i).format(DateTimeFormatter.ofPattern("dd MMMM")), String.join(", ", loadAppointmentByDate(LocalDate.now().minusDays(3).plusDays(i)))),
                     _ -> showAppointmentDialog(LocalDate.now().minusDays(3).plusDays(finalI)));
         }
-        revalidate();
-        repaint();
     }
     private void addButton(String text, ActionListener action) {
         JButton btn = new JButton(text);
@@ -1242,7 +1239,7 @@ class DailyUsageDAO {
 
 class AppointmentDAO {
     public static ResultSet getAppointmentByDate(LocalDate date) throws SQLException {
-        PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("SELECT a.*, c.name FROM appointments a JOIN clients c ON a.client_id = c.client_id WHERE DATE(a.date) = ? AND a.is_deleted = 0");
+        PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("SELECT a.*, c.name, c.phone FROM appointments a JOIN clients c ON a.client_id = c.client_id WHERE DATE(a.date) = ? AND a.is_deleted = 0");
         stmt.setDate(1, Date.valueOf(date));
         return stmt.executeQuery();
     }
@@ -1689,8 +1686,7 @@ class AppointmentDialog extends JDialog {
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
         if (!isTaken) {
             panel.setLayout(new GridLayout(2, 0, 5, 5));
-            setTitle("Appointment for " + date);
-            JXTitledPanel namePanel = new JXTitledPanel("Client Name : ");
+            JXTitledPanel namePanel = new JXTitledPanel("Client : ");
             namePanel.setForeground(Color.WHITE);
             namePanel.setTitleFont(new Font("DejaVu", Font.PLAIN, 22));
             namePanel.setTitleForeground(Color.WHITE);
@@ -1709,21 +1705,26 @@ class AppointmentDialog extends JDialog {
             try {
                 ResultSet rs = AppointmentDAO.getAppointmentByDate(date);
                 while (rs.next()) {
-                    name.setText(rs.getString("name"));
+                    name.setText(String.format("<html>%s<br>%s</html>", " Name : " + rs.getString("name") + ".", " Phone : " + rs.getString("phone")));
                     description.setText(rs.getString("description"));
+                    if (rs.getBoolean("is_done")) {
+                        setTitle("This appointment is done.");
+                    } else {
+                        setTitle("This appointment isn't done.");
+                    }
                 }
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
             namePanel.add(name);
-            description.add(description);
+            descriptionPanel.add(description);
             panel.add(namePanel);
             panel.add(descriptionPanel);
             JPanel btnPanel = new JPanel();
             btnPanel.setLayout(new GridLayout(0, 2, 5, 5));
             btnPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
             addButton(btnPanel, "Delete", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/delete.png"))), "Deleting this appointment.", _ -> deleteAppointment(date));
-            addButton(btnPanel, "Set Done", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/delete.png"))), "Setting this appointment done.", _ -> setAppointmentDone(date));
+            addButton(btnPanel, "Set Done", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/check.png"))), "Setting this appointment done.", _ -> setAppointmentDone(date));
             add(panel, BorderLayout.CENTER);
             add(btnPanel, BorderLayout.SOUTH);
         } else {
@@ -1736,27 +1737,23 @@ class AppointmentDialog extends JDialog {
                 }
             });
             loadClients();
-            JButton addClientBtn = new JButton("+");
-            addClientBtn.setForeground(Color.WHITE);
-            addClientBtn.setFont(new Font("DejaVu", Font.BOLD, 20));
-            addClientBtn.addActionListener(_ -> {
-                new ClientDialog(null, "Add Client", -1).setVisible(true);
-                loadClients();
-            });
+
             descriptionArea = new JTextArea(3, 20);
-            JButton addBtn = new JButton("Add");
-            addBtn.addActionListener(_ -> addAppointment());
-            addBtn.setFont(new Font("DejaVu", Font.PLAIN, 22));
-            addBtn.setOpaque(true);
-            addBtn.setSize(20, 20);
+            JPanel btnPanel = new JPanel();
+            btnPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
+            btnPanel.setLayout(new GridLayout(1, 0, 5, 5));
+            addButton(btnPanel, "Add", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/add.png"))), "Add a new appointment", _ -> addAppointment());
             panel.add(new JLabel("Client : ")).setFont(new Font("DejaVu", Font.BOLD, 20));
             panel.add(clientCombo);
             panel.add(new JLabel("Add client : ")).setFont(new Font("DejaVu", Font.BOLD, 20));
-            panel.add(addClientBtn);
+            addButton(panel, "", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/add.png"))), "Add a new client if it isn't exist.", _ -> {
+                new ClientDialog(null, "New Client", -1).setVisible(true);
+                loadClients();
+            });
             panel.add(new JLabel("Description : ")).setFont(new Font("DejaVu", Font.BOLD, 20));
             panel.add(new JScrollPane(descriptionArea));
             add(panel, BorderLayout.CENTER);
-            add(addBtn, BorderLayout.SOUTH);
+            add(btnPanel, BorderLayout.SOUTH);
         }
     }
 
