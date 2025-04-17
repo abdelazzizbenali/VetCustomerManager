@@ -125,11 +125,12 @@ class DatabaseConnector {
                     "  FOREIGN KEY (m_id) REFERENCES medicines(m_id)" +
                     ")ENGINE=InnoDB");
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS appointments (" +
-                    "  id int auto_increment primary key," +
-                    "  client_id int," +
-                    "  date timestamp," +
+                    "  id INT AUTO_INCREMENT PRIMARY KEY," +
+                    "  client_id INT," +
+                    "  date date NOT NULL," +
+                    "  is_done boolean NOT NULL," +
                     "  is_deleted tinyint(1) DEFAULT 0," +
-                    "  description text," +
+                    "  description TEXT," +
                     "  FOREIGN KEY (client_id) REFERENCES clients(client_id)" +
                     ")ENGINE=InnoDB");
             stmt.executeUpdate("CREATE PROCEDURE IF NOT EXISTS SellMedicinePartial(" +
