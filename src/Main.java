@@ -19,7 +19,6 @@ import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.lang.Object;
 import java.util.List;
-
 /**
  **     Author: Parent: by AAB
  **/
@@ -879,7 +878,7 @@ class AppointmentPanel extends JPanel {
     }
     public void initializeUI() {
         setBorder(new EmptyBorder(20, 20, 20, 20));
-        setLayout(new GridLayout(5, 7, 5, 5));
+        setLayout(new GridLayout(5, 7, 10, 10));
     }
     public void refreshData() {
         removeAll();
