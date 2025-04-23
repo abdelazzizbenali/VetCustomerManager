@@ -536,7 +536,9 @@ class ClientPanel extends JPanel {
             while (rs.next()) {
                 Object[] row = {
                         rs.getInt("client_id"),
-                        rs.getString("name")
+                        rs.getString("name"),
+                        rs.getDouble("total_payed"),
+                        rs.getDouble("total_notPayed")
                 };
                 clientModel.addRow(row);
             }
@@ -623,7 +625,6 @@ class TransactionPanel extends JPanel {
         addButton(toolBar, "Delete", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/delete.png"))), "Delete selected", _ -> deleteTransactions());
         addButton(toolBar, "Set payed", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/coin.png"))), "Set selected as payed", _ -> setTransactionsPayed());
         addButton(toolBar, "Refresh", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/refresh.png"))), "Refresh data", _ -> refreshData());
-        // toolBar.setLayout(new GridLayout(1,3, 0, 0));
         statusLabel = new JLabel(" Ready");
         statusLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
         statusLabel.setBackground(new Color(0, 0, 0));
@@ -1080,7 +1081,7 @@ class MedicineDAO {
 }
 class ClientDAO {
     public static ResultSet getAllClients() throws SQLException {
-        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT * FROM clients");
+        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT c.client_id, c.name, SUM(CASE WHEN t.payer = 1 THEN t.amount ELSE 0 END) AS total_payed, SUM(CASE WHEN t.payer = 0 THEN t.amount ELSE 0 END) AS total_notPayed FROM transactions t JOIN clients c ON t.client_id = c.client_id GROUP BY c.name");
     }
     public static void addClient(String name, String phone, String description) throws SQLException {
         try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("INSERT INTO clients (name, phone, clientDescription) VALUES (?, ?, ?)")) {
@@ -1201,9 +1202,7 @@ class DailyUsageDAO {
         return stmt.executeQuery();
     }
     public static ResultSet getDailySummary() throws SQLException {
-        Connection conn = DatabaseConnector.getConnection();
-        return conn.createStatement().executeQuery(
-                "SELECT DATE(date) AS date, COUNT(*) AS transaction_count, SUM(amount) AS total_amount FROM transactions GROUP BY DATE(date) ORDER BY DATE(date) DESC");
+        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT DATE(date) AS date, COUNT(*) AS transaction_count, SUM(amount) AS total_amount FROM transactions GROUP BY DATE(date) ORDER BY DATE(date) DESC");
     }
     public static ResultSet getTransactionsByDate(LocalDate date) throws SQLException {
         Connection conn = DatabaseConnector.getConnection();
@@ -1655,13 +1654,11 @@ class DailyUsageDialog extends JDialog {
         }
     }
 }
-
 class AppointmentDialog extends JDialog {
     private final LocalDate date;
     private final boolean isTaken;
     private JComboBox<Client> clientCombo;
     private JTextArea descriptionArea;
-
     public AppointmentDialog(JPanel parent, LocalDate date, boolean isTaken) {
         super((Frame) SwingUtilities.getWindowAncestor(parent), true);
         this.date = date;
@@ -1726,7 +1723,6 @@ class AppointmentDialog extends JDialog {
                 }
             });
             loadClients();
-
             descriptionArea = new JTextArea(3, 20);
             JPanel btnPanel = new JPanel();
             btnPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
