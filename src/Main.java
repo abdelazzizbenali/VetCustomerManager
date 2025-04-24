@@ -927,7 +927,6 @@ class SettingPanel extends JPanel {
         addButton("Load Data", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/database_add.png"))), "Load data to a specific table in the database.", this::loadFile);
         addButton("Button text that is coming soon", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/database_add.png"))), "This is another button.", this::loadFile);
     }
-
     private void addButton(String text, ImageIcon icon, String tooltip, ActionListener action) {
         JButton btn = new JButton(text);
         btn.setLayout(new BorderLayout(20, 20));
@@ -940,11 +939,9 @@ class SettingPanel extends JPanel {
         btn.setPreferredSize(new Dimension(140, 50));
         add(btn);
     }
-
     public void loadSettings() {
 //        ObjectMapper objectMapper = new ObjectMapper();
     }
-
     public void loadFile(ActionEvent e) {
         fileChooser = new JFileChooser();
         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
