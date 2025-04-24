@@ -718,13 +718,11 @@ class TransactionPanel extends JPanel {
         JOptionPane.showMessageDialog(this, message, "Transaction Error", JOptionPane.ERROR_MESSAGE);
     }
 }
-
 class MedicinePanel extends JPanel {
     private JTable dataTable;
     private DefaultTableModel tableModel;
     private JLabel statusLabel;
     private JTextField searchField;
-
     public MedicinePanel() {
         initializeUI();
         loadData();
