@@ -82,7 +82,7 @@ class DatabaseConnector {
         }
     }
     public static void initializeDatabase() throws SQLException {
-        try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
+        try (Statement stmt = getConnection().createStatement()) {
             stmt.execute("USE parent");
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS medicines (" +
                     "  m_id INT PRIMARY KEY AUTO_INCREMENT," +
@@ -568,7 +568,7 @@ class ClientPanel extends JPanel {
             showError("Select at least one client.");
             return;
         }
-        int confirm = JOptionPane.showConfirmDialog(this, "Delete selected clients ? ", "Confirm Delete", JOptionPane.YES_NO_OPTION);
+        int confirm = JOptionPane.showConfirmDialog(this, "Delete selected " + clientTable.getSelectedRows().length + " clients ?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
         if (confirm == JOptionPane.YES_OPTION) {
             try {
                 for (int n : row) {
@@ -848,7 +848,7 @@ class MedicinePanel extends JPanel {
             showError("Select at least one medicine.");
             return;
         }
-        int confirm = JOptionPane.showConfirmDialog(this, "Delete selected medicines ? ", "Confirm Delete", JOptionPane.YES_NO_OPTION);
+        int confirm = JOptionPane.showConfirmDialog(this, "Delete selected " + dataTable.getSelectedRows().length + " medicines ?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
         if (confirm == JOptionPane.YES_OPTION) {
             try {
                 for (int n : row) {
@@ -1076,7 +1076,7 @@ class MedicineDAO {
 }
 class ClientDAO {
     public static ResultSet getAllClients() throws SQLException {
-        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT c.client_id, c.name, SUM(CASE WHEN t.payer = 1 THEN t.amount ELSE 0 END) AS total_payed, SUM(CASE WHEN t.payer = 0 THEN t.amount ELSE 0 END) AS total_notPayed FROM transactions t JOIN clients c ON t.client_id = c.client_id GROUP BY c.name");
+        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT c.client_id, c.name, c.phone, c.clientDescription, SUM(CASE WHEN t.payer = 1 THEN t.amount ELSE 0 END) AS total_payed, SUM(CASE WHEN t.payer = 0 THEN t.amount ELSE 0 END) AS total_notPayed FROM transactions t JOIN clients c ON t.client_id = c.client_id GROUP BY c.name");
     }
     public static void addClient(String name, String phone, String description) throws SQLException {
         try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("INSERT INTO clients (name, phone, clientDescription) VALUES (?, ?, ?)")) {
@@ -1557,7 +1557,7 @@ class DailyUsageDialog extends JDialog {
     private final JTextArea descriptionArea = new JTextArea();
     private final JCheckBox payedCheckBox = new JCheckBox("Payed ?");
     public DailyUsageDialog(Frame owner) {
-        super(owner, "Add Daily Transaction", true);
+        super(owner, "Add Transaction", true);
         initializeUI();
     }
     private void initializeUI() {
@@ -1645,7 +1645,7 @@ class DailyUsageDialog extends JDialog {
             List<Client> clients = ClientDAO.getAllClientsAsList();
             clients.forEach(clientCombo::addItem);
         } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Error loading medicines: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, "Error loading clients: " + e.getMessage());
         }
     }
 }
