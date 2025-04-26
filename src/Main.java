@@ -179,9 +179,6 @@ class MainWindow extends JFrame {
     }
     private void initializeUI() {
         setTitle("Veterinary Management System");
-        if (Taskbar.isTaskbarSupported()) {
-            Taskbar.getTaskbar().setIconImage(new ImageIcon(Objects.requireNonNull(getClass().getResource("home.png"))).getImage());
-        }
         setSize(1400, 1000);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
@@ -1057,8 +1054,7 @@ class MedicineDAO {
     }
     public static ResultSet searchMedicinesByName(String searchTerm) throws SQLException {
         String sql = "SELECT m.m_id, m.m_name, mi.m_size, mi.m_full_size, m.m_type, mi.m_buyPrice, mi.m_sellPrice, mi.m_expiryDate, mi.m_amount FROM medicines m JOIN medicinesInfo mi ON m.m_id = mi.m_id WHERE m.m_name LIKE '%"+searchTerm+"%'";
-        PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement(sql);
-        return stmt.executeQuery(sql);
+        return DatabaseConnector.getConnection().prepareStatement(sql).executeQuery(sql);
     }
     public static void sellPartialMedicine(int medicineId, double quantity) throws SQLException {
         try (Connection conn = DatabaseConnector.getConnection();
@@ -1076,7 +1072,7 @@ class MedicineDAO {
 }
 class ClientDAO {
     public static ResultSet getAllClients() throws SQLException {
-        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT c.client_id, c.name, c.phone, c.clientDescription, SUM(CASE WHEN t.payer = 1 THEN t.amount ELSE 0 END) AS total_payed, SUM(CASE WHEN t.payer = 0 THEN t.amount ELSE 0 END) AS total_notPayed FROM transactions t JOIN clients c ON t.client_id = c.client_id GROUP BY c.name");
+        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT c.client_id, c.name, c.phone, c.clientDescription, SUM(CASE WHEN t.payer = 1 THEN t.amount ELSE 0 END) AS total_payed, SUM(CASE WHEN t.payer = 0 THEN t.amount ELSE 0 END) AS total_notPayed FROM transactions t JOIN clients c ON t.client_id = c.client_id GROUP BY c.client_id");
     }
     public static void addClient(String name, String phone, String description) throws SQLException {
         try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("INSERT INTO clients (name, phone, clientDescription) VALUES (?, ?, ?)")) {
@@ -1182,8 +1178,7 @@ class TransactionDAO {
         }
     }
     public static void setTransactionPayed(int trId) throws SQLException {
-        String sql = "UPDATE transactions SET payer = 1 WHERE transaction_id = ?";
-        try (Connection conn = DatabaseConnector.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
+        try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("UPDATE transactions SET payer = 1 WHERE transaction_id = ?")) {
             stmt.setInt(1, trId);
             stmt.executeUpdate();
         }
@@ -1380,7 +1375,6 @@ class MedicineDialog extends JDialog {
             double sellPrice = Double.parseDouble(sellSpinner.getValue().toString());
             LocalDate expiry = LocalDate.parse(dateField.getText());
             int amount = Integer.parseInt(amountSpinner.getValue().toString());
-
             if (editId == -1) {
                 int id = MedicineDAO.addMedicine(name, type);
                 MedicineDAO.addMedicineInfo(id, size, size, buyPrice, sellPrice, expiry, amount);
@@ -1389,8 +1383,6 @@ class MedicineDialog extends JDialog {
                 MedicineDAO.updateMedicineInfo(editId, size, size, buyPrice, sellPrice, expiry, amount);
             }
             dispose();
-        } catch (DateTimeParseException e) {
-            JOptionPane.showMessageDialog(this, "Invalid date format!\nUse YYYY-MM-DD");
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage());
         } catch (NumberFormatException e) {
