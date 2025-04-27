@@ -14,6 +14,7 @@ import java.sql.*;
 import java.sql.Date;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
@@ -439,7 +440,7 @@ class ClientPanel extends JPanel {
     }
     private void initializeUI() {
         setLayout(new BorderLayout());
-        String[] columnNames = {"ID", "Client Name", "Payed", "Non Payed"};
+        String[] columnNames = {"ID", "Name", "Payed", "Non Payed"};
         clientModel = new DefaultTableModel(columnNames, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -983,7 +984,7 @@ class MedicineDAO {
         throw new SQLException("Failed to get generated ID");
     }
     public static void addMedicineInfo(int m_id, double size, double fullSize, double buyPrice, double sellPrice, LocalDate expiryDate, int amount) throws SQLException {
-        String query = "INSERT INTO medicinesInfo (m_id, m_size, m_full_size, m_buyPrice, m_sellPrice, m_expiryDate, m_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String query = "INSERT INTO medicinesInfo (m_id, m_size, m_full_size, m_buyPrice, m_sellPrice, m_expiryDate, m_amount, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, 0)";
         try (Connection conn = DatabaseConnector.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
             stmt.setInt(1, m_id);
@@ -1072,7 +1073,10 @@ class MedicineDAO {
 }
 class ClientDAO {
     public static ResultSet getAllClients() throws SQLException {
-        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT c.client_id, c.name, c.phone, c.clientDescription, SUM(CASE WHEN t.payer = 1 THEN t.amount ELSE 0 END) AS total_payed, SUM(CASE WHEN t.payer = 0 THEN t.amount ELSE 0 END) AS total_notPayed FROM transactions t JOIN clients c ON t.client_id = c.client_id GROUP BY c.client_id");
+        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT c.client_id, c.name, SUM(CASE WHEN t.payer = 1 THEN t.amount ELSE 0 END) AS total_payed, SUM(CASE WHEN t.payer = 0 THEN t.amount ELSE 0 END) AS total_notPayed, c.phone, c.clientDescription FROM transactions t JOIN clients c ON t.client_id = c.client_id GROUP BY c.client_id");
+    }
+    public static ResultSet getAllClientsForList() throws SQLException {
+        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT * FROM clients");
     }
     public static void addClient(String name, String phone, String description) throws SQLException {
         try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("INSERT INTO clients (name, phone, clientDescription) VALUES (?, ?, ?)")) {
@@ -1084,7 +1088,7 @@ class ClientDAO {
     }
     public static List<Client> getAllClientsAsList() throws SQLException {
         List<Client> clients = new ArrayList<>();
-        ResultSet rs = getAllClients();
+        ResultSet rs = getAllClientsForList();
         while (rs.next()) {
             clients.add(new Client(
                     rs.getInt("client_id"),
@@ -1307,7 +1311,6 @@ class MedicineDialog extends JDialog {
     private final JComboBox<String> typeField = new JComboBox<>(new String[]{"Anti-Biotiques", "Anti-Inflammatoires", "Anti-Parasitaires", "CMV et Addetifs", "Vaccins", "Anesthesiques", "Accessoires", "Outils", "Desinfectent", "Hormones", "Serum et Fluid"});
     private final JSpinner buySpinner = new JSpinner(new SpinnerNumberModel(0, 0, 100000, 100));
     private final JSpinner sellSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 100000, 100));
-    private final JTextField dateField = new JTextField();
     private final JXDatePicker datePicker = new JXDatePicker();
     private final JSpinner amountSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 10000, 1));
     private final int editId;
@@ -1331,7 +1334,7 @@ class MedicineDialog extends JDialog {
                     typeField.setSelectedItem(medicine.getType());
                     buySpinner.setValue(medicine.getBuyPrice());
                     sellSpinner.setValue(medicine.getSellPrice());
-                    dateField.setText(medicine.getExpiryDate().toString());
+                    datePicker.setDate(Date.valueOf(medicine.getExpiryDate()));
                     amountSpinner.setValue(medicine.getAmount());
                 }
             } catch (SQLException e) {
@@ -1373,7 +1376,7 @@ class MedicineDialog extends JDialog {
             String type = Objects.requireNonNull(typeField.getSelectedItem()).toString();
             double buyPrice = Double.parseDouble(buySpinner.getValue().toString());
             double sellPrice = Double.parseDouble(sellSpinner.getValue().toString());
-            LocalDate expiry = LocalDate.parse(dateField.getText());
+            LocalDate expiry = LocalDate.ofInstant(datePicker.getDate().toInstant(), ZoneId.systemDefault());
             int amount = Integer.parseInt(amountSpinner.getValue().toString());
             if (editId == -1) {
                 int id = MedicineDAO.addMedicine(name, type);
