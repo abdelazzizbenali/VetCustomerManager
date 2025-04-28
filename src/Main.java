@@ -274,7 +274,6 @@ class DailyUsagePanel extends JPanel {
         add(tabbedPane, BorderLayout.CENTER);
         add(statusLabel, BorderLayout.SOUTH);
     }
-
     private void addButton(JToolBar bar, String text, ImageIcon icon, ActionListener action) {
         JButton btn = new JButton(text);
         btn.addActionListener(action);
@@ -326,7 +325,6 @@ class DailyUsagePanel extends JPanel {
             showError("Error loading history: " + e.getMessage());
         }
     }
-
     private void showDateTransactions(LocalDate date) {
         JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this),
                 "Transactions for " + date.format(DateTimeFormatter.ISO_DATE), true);
@@ -335,7 +333,6 @@ class DailyUsagePanel extends JPanel {
         dialog.setSize(800, 600);
         dialog.setVisible(true);
     }
-
     private void deleteTodayTransactions() {
         int[] row = todayTable.getSelectedRows();
         if (row.length == 0) {
@@ -1073,10 +1070,7 @@ class MedicineDAO {
 }
 class ClientDAO {
     public static ResultSet getAllClients() throws SQLException {
-        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT c.client_id, c.name, SUM(CASE WHEN t.payer = 1 THEN t.amount ELSE 0 END) AS total_payed, SUM(CASE WHEN t.payer = 0 THEN t.amount ELSE 0 END) AS total_notPayed, c.phone, c.clientDescription FROM transactions t JOIN clients c ON t.client_id = c.client_id GROUP BY c.client_id");
-    }
-    public static ResultSet getAllClientsForList() throws SQLException {
-        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT * FROM clients");
+        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT c.*,COALESCE(SUM(IF(t.payer = 1, t.amount, 0)), 0) AS total_payed,COALESCE(SUM(IF(t.payer = 0, t.amount, 0)), 0) AS total_notPayed FROM clients c LEFT JOIN transactions t ON c.client_id = t.client_id GROUP BY c.client_id");
     }
     public static void addClient(String name, String phone, String description) throws SQLException {
         try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("INSERT INTO clients (name, phone, clientDescription) VALUES (?, ?, ?)")) {
@@ -1088,7 +1082,7 @@ class ClientDAO {
     }
     public static List<Client> getAllClientsAsList() throws SQLException {
         List<Client> clients = new ArrayList<>();
-        ResultSet rs = getAllClientsForList();
+        ResultSet rs = getAllClients();
         while (rs.next()) {
             clients.add(new Client(
                     rs.getInt("client_id"),
@@ -1192,7 +1186,7 @@ class DailyUsageDAO {
     public static ResultSet getTodaysTransactions() throws SQLException {
         Connection conn = DatabaseConnector.getConnection();
         PreparedStatement stmt = conn.prepareStatement(
-                "SELECT t.*, c.name, m.m_name FROM transactions t JOIN clients c ON t.client_id = c.client_id JOIN medicines m ON t.m_id = m.m_id WHERE DATE(t.date) = CURDATE()");
+                "SELECT t.*, c.name, m.m_name FROM transactions t JOIN clients c ON t.client_id = c.client_id JOIN medicines m ON t.m_id = m.m_id WHERE DATE(t.date) = CURDATE() AND is_deleted = 0");
         return stmt.executeQuery();
     }
     public static ResultSet getDailySummary() throws SQLException {
