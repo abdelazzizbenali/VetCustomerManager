@@ -149,7 +149,7 @@ class DatabaseConnector {
                     "    FOR UPDATE;" +
                     "    IF current_amount <= 0 THEN" +
                     "        SIGNAL SQLSTATE '45000' " +
-                    "        SET MESSAGE_TEXT = 'Not enough stock (initial check)';" +
+                    "        SET MESSAGE_TEXT = 'Not enough stock';" +
                     "    END IF;" +
                     "    SET current_size = current_size - sell_quantity;" +
                     "    IF current_size <= 0 THEN" +
@@ -158,7 +158,7 @@ class DatabaseConnector {
                     "    END IF;" +
                     "    IF current_amount < 0 THEN" +
                     "        SIGNAL SQLSTATE '45000' " +
-                    "        SET MESSAGE_TEXT = 'Not enough stock (post-calculation)';" +
+                    "        SET MESSAGE_TEXT = 'Not enough stock';" +
                     "    END IF;" +
                     "    UPDATE medicinesInfo " +
                     "    SET m_amount = current_amount," +
@@ -1130,16 +1130,13 @@ class ClientDAO {
         }
     }
     public static ResultSet searchClientByName(String searchTerm) throws SQLException {
-        String sql = "SELECT * FROM clients WHERE name LIKE '%"+searchTerm+"%'";
-        PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement(sql);
-        return stmt.executeQuery(sql);
+        String sql = "SELECT c.*,COALESCE(SUM(IF(t.payer = 1, t.amount, 0)), 0) AS total_payed,COALESCE(SUM(IF(t.payer = 0, t.amount, 0)), 0) AS total_notPayed FROM clients c LEFT JOIN transactions t ON c.client_id = t.client_id WHERE c.name LIKE '%" + searchTerm + "%' GROUP BY c.client_id";
+        return DatabaseConnector.getConnection().prepareStatement(sql).executeQuery(sql);
     }
 }
 class TransactionDAO {
     public static ResultSet getTransactionsByClient(int clientId) throws SQLException {
-        Connection conn = DatabaseConnector.getConnection();
-        PreparedStatement stmt = conn.prepareStatement(
-                "SELECT t.transaction_id, t.date, m.m_name, t.q_sold, t.amount, t.type, t.description, t.payer FROM transactions t JOIN medicines m ON t.m_id = m.m_id WHERE client_id = ? AND is_deleted = 0");
+        PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("SELECT t.transaction_id, t.date, m.m_name, t.q_sold, t.amount, t.type, t.description, t.payer FROM transactions t JOIN medicines m ON t.m_id = m.m_id WHERE client_id = ? AND is_deleted = 0");
         stmt.setInt(1, clientId);
         return stmt.executeQuery();
     }
