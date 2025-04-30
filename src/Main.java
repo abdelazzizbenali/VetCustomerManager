@@ -1,5 +1,5 @@
-import mdlaf.MaterialLookAndFeel;
-import mdlaf.themes.MaterialOceanicTheme;
+import mdlaf.*;
+import mdlaf.themes.*;
 import org.jdesktop.swingx.JXDatePicker;
 import org.jdesktop.swingx.JXTitledPanel;
 import javax.swing.*;
