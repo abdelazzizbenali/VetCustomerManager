@@ -192,8 +192,14 @@ class MainWindow extends JFrame {
         add(tabbedPane, BorderLayout.CENTER);
     }
 }
-
 class DailyUsagePanel extends JPanel {
+    private final JComboBox<Client> clientCombo = new JComboBox<>();
+    private final JComboBox<Medicine> medicineCombo = new JComboBox<>();
+    private final JSpinner quantitySpinner = new JSpinner(new SpinnerNumberModel(0.0, 0, 10000000, 1));
+    private final JSpinner amountSpinner = new JSpinner(new SpinnerNumberModel(0.0, 0, 10000000, 100));
+    private final JComboBox<String> typeCombo = new JComboBox<>(new String[]{"Consultation", "Treatment", "Product"});
+    private final JTextArea descriptionArea = new JTextArea();
+    private final JCheckBox payedCheckBox = new JCheckBox("Payed ?");
     JTabbedPane tabbedPane = new JTabbedPane();
     private JTable todayTable;
     private DefaultTableModel todayModel;
@@ -207,6 +213,56 @@ class DailyUsagePanel extends JPanel {
     }
     private void initializeUI() {
         setLayout(new BorderLayout());
+        JPanel trPanel = new JPanel(new BorderLayout(10, 10));
+        trPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        JPanel formPanel = new JPanel(new GridLayout(0, 1, 10, 10));
+        typeCombo.setFont(new Font("DejaVu",Font.BOLD,20));
+        descriptionArea.setFont(new Font("DejaVu",Font.BOLD,20));
+        payedCheckBox.setFont(new Font("DejaVu",Font.BOLD,20));
+        medicineCombo.setEditable(true);
+        medicineCombo.setToolTipText("Medicine List");
+        medicineCombo.setFont(new Font("DejaVu",Font.BOLD,20));
+        medicineCombo.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                if (value instanceof Medicine) {
+                    value = ((Medicine) value).getName();
+                }
+                return super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            }
+        });
+        clientCombo.setFont(new Font("DejaVu",Font.BOLD,20));
+        clientCombo.setEditable(true);
+        clientCombo.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                if (value instanceof Client) {
+                    value = ((Client) value).getName();
+                }
+                return super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            }
+        });
+        quantitySpinner.setFont(new Font("DejaVu",Font.BOLD,20));
+        amountSpinner.setFont(new Font("DejaVu",Font.BOLD,20));
+        formPanel.add(new JLabel("Client:")).setFont(new Font("DejaVu",Font.BOLD,20));
+        formPanel.add(clientCombo);
+        formPanel.add(new JLabel("Medicine:")).setFont(new Font("DejaVu",Font.BOLD,20));
+        formPanel.add(medicineCombo);
+        formPanel.add(new JLabel("Quantity: (en ml)")).setFont(new Font("DejaVu",Font.BOLD,20));
+        formPanel.add(quantitySpinner);
+        formPanel.add(new JLabel("Amount*:")).setFont(new Font("DejaVu",Font.BOLD,20));
+        formPanel.add(amountSpinner);
+        formPanel.add(new JLabel("Type*:")).setFont(new Font("DejaVu",Font.BOLD,20));
+        formPanel.add(typeCombo);
+        formPanel.add(new JLabel("Description:")).setFont(new Font("DejaVu",Font.BOLD,20));
+        formPanel.add(new JScrollPane(descriptionArea));
+        formPanel.add(payedCheckBox);
+        loadMedicines();
+        loadClients();
+        JButton btnSave = new JButton("Save");
+        btnSave.addActionListener(_ -> saveTransaction());
+        trPanel.add(formPanel, BorderLayout.CENTER);
+        trPanel.add(btnSave, BorderLayout.SOUTH);
         JPanel todayPanel = new JPanel(new BorderLayout());
         todayModel = new DefaultTableModel(new String[]{"ID", "Time", "Client", "Medicine", "Quantity", "Amount", "Type", "Description", "Payed"}, 0) {
             @Override
@@ -228,19 +284,18 @@ class DailyUsagePanel extends JPanel {
         todayTable.removeColumn(todayTable.getColumnModel().getColumn(0));
         todayTable.setRowMargin(1);
         JToolBar todayToolbar = new JToolBar();
-        addButton(todayToolbar, "Add", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/add.png"))), _ -> showAddDialog());
         addButton(todayToolbar, "Delete", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/delete.png"))), _ -> deleteTodayTransactions());
         addButton(todayToolbar, "Set payed", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/coin.png"))), _ -> setTransactionsPayed());
         addButton(todayToolbar, "Refresh", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/refresh.png"))), _ -> refreshData());
         todayPanel.add(todayToolbar, BorderLayout.NORTH);
         todayPanel.add(new JScrollPane(todayTable), BorderLayout.CENTER);
+        todayPanel.add(trPanel, BorderLayout.EAST);
         JPanel historyPanel = new JPanel(new BorderLayout());
         historyModel = new DefaultTableModel(new String[]{"Date", "Total Transactions", "Total Amount"}, 0) {
             @Override
             public boolean isCellEditable(int row, int col) {
                 return false;
             }
-
             @Override
             public Class<?> getColumnClass(int column) {
                 return switch (column) {
@@ -285,7 +340,6 @@ class DailyUsagePanel extends JPanel {
         bar.add(btn);
         bar.addSeparator(new Dimension(10,0));
     }
-
     private void loadTodayData() {
         try {
             todayModel.setRowCount(0);
@@ -308,7 +362,6 @@ class DailyUsagePanel extends JPanel {
             showError("Error loading today's data: " + e.getMessage());
         }
     }
-
     private void loadHistoryData() {
         try {
             historyModel.setRowCount(0);
@@ -351,7 +404,6 @@ class DailyUsagePanel extends JPanel {
             }
         }
     }
-
     private void setTransactionsPayed() {
         int[] row = todayTable.getSelectedRows();
         if (row.length == 0) {
@@ -378,10 +430,38 @@ class DailyUsagePanel extends JPanel {
     private void showError(String message) {
         JOptionPane.showMessageDialog(this, message, "Transaction Error", JOptionPane.ERROR_MESSAGE);
     }
-
-    private void showAddDialog() {
-        new DailyUsageDialog(null).setVisible(true);
-        refreshData();
+    private void loadMedicines() {
+        try {
+            List<Medicine> medicines = MedicineDAO.getAllMedicinesAsList();
+            medicines.forEach(medicineCombo::addItem);
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error loading medicines: " + e.getMessage());
+        }
+    }
+    private void loadClients() {
+        try {
+            List<Client> clients = ClientDAO.getAllClientsAsList();
+            clients.forEach(clientCombo::addItem);
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error loading clients: " + e.getMessage());
+        }
+    }
+    private void saveTransaction() {
+        try {
+            TransactionDAO.addTransaction(
+                    ((Client) Objects.requireNonNull(clientCombo.getSelectedItem())).getId() ,
+                    ((Medicine) Objects.requireNonNull(medicineCombo.getSelectedItem())).getId(),
+                    LocalDateTime.now(),
+                    (Double) quantitySpinner.getValue(),
+                    (Double) amountSpinner.getValue(),
+                    (String) typeCombo.getSelectedItem(),
+                    descriptionArea.getText(),
+                    payedCheckBox.isSelected()
+            );
+            refreshData();
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error saving: " + e.getMessage());
+        }
     }
 }
 class DailyTransactionsPanel extends JPanel {
@@ -1531,107 +1611,6 @@ class TransactionDialog extends JDialog {
                     (selected.getAmount() - 1) * selected.getFullSize();
             SpinnerNumberModel model = (SpinnerNumberModel) quantitySpinner.getModel();
             model.setMaximum(max);
-        }
-    }
-}
-class DailyUsageDialog extends JDialog {
-    private final JComboBox<Client> clientCombo = new JComboBox<>();
-    private final JComboBox<Medicine> medicineCombo = new JComboBox<>();
-    private final JSpinner quantitySpinner = new JSpinner(new SpinnerNumberModel(0.0, 0, 10000000, 1));
-    private final JSpinner amountSpinner = new JSpinner(new SpinnerNumberModel(0.0, 0, 10000000, 100));
-    private final JComboBox<String> typeCombo = new JComboBox<>(new String[]{"Consultation", "Treatment", "Product"});
-    private final JTextArea descriptionArea = new JTextArea();
-    private final JCheckBox payedCheckBox = new JCheckBox("Payed ?");
-    public DailyUsageDialog(Frame owner) {
-        super(owner, "Add Transaction", true);
-        initializeUI();
-    }
-    private void initializeUI() {
-        setSize(600, 500);
-        setLocationRelativeTo(getOwner());
-        JPanel trPanel = new JPanel(new BorderLayout(10, 10));
-        trPanel.setBorder(new EmptyBorder(10, 10, 0, 10));
-        JPanel formPanel = new JPanel(new GridLayout(0, 2, 10, 10));
-        typeCombo.setFont(new Font("DejaVu",Font.BOLD,20));
-        descriptionArea.setFont(new Font("DejaVu",Font.BOLD,20));
-        payedCheckBox.setFont(new Font("DejaVu",Font.BOLD,20));
-        medicineCombo.setEditable(true);
-        medicineCombo.setFont(new Font("DejaVu",Font.BOLD,20));
-        medicineCombo.setRenderer(new DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-                if (value instanceof Medicine) {
-                    value = ((Medicine) value).getName();
-                }
-                return super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-            }
-        });
-        clientCombo.setFont(new Font("DejaVu",Font.BOLD,20));
-        clientCombo.setEditable(true);
-        clientCombo.setRenderer(new DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-                if (value instanceof Client) {
-                    value = ((Client) value).getName();
-                }
-                return super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-            }
-        });
-        quantitySpinner.setFont(new Font("DejaVu",Font.BOLD,20));
-        amountSpinner.setFont(new Font("DejaVu",Font.BOLD,20));
-        formPanel.add(new JLabel("Client:")).setFont(new Font("DejaVu",Font.BOLD,20));
-        formPanel.add(clientCombo);
-        formPanel.add(new JLabel("Medicine:")).setFont(new Font("DejaVu",Font.BOLD,20));
-        formPanel.add(medicineCombo);
-        formPanel.add(new JLabel("Quantity: (en ml)")).setFont(new Font("DejaVu",Font.BOLD,20));
-        formPanel.add(quantitySpinner);
-        formPanel.add(new JLabel("Amount*:")).setFont(new Font("DejaVu",Font.BOLD,20));
-        formPanel.add(amountSpinner);
-        formPanel.add(new JLabel("Type*:")).setFont(new Font("DejaVu",Font.BOLD,20));
-        formPanel.add(typeCombo);
-        formPanel.add(new JLabel("Description:")).setFont(new Font("DejaVu",Font.BOLD,20));
-        formPanel.add(new JScrollPane(descriptionArea));
-        formPanel.add(new JLabel("Payed ? ")).setFont(new Font("DejaVu",Font.BOLD,20));
-        formPanel.add(payedCheckBox);
-        loadMedicines();
-        loadClients();
-        JButton btnSave = new JButton("Save");
-        btnSave.addActionListener(_ -> saveTransaction());
-        trPanel.add(formPanel, BorderLayout.CENTER);
-        trPanel.add(btnSave, BorderLayout.SOUTH);
-        add(trPanel);
-    }
-    private void saveTransaction() {
-        try {
-            TransactionDAO.addTransaction(
-                    ((Client) Objects.requireNonNull(clientCombo.getSelectedItem())).getId() ,
-                    ((Medicine) Objects.requireNonNull(medicineCombo.getSelectedItem())).getId(),
-                    LocalDateTime.now(),
-                    (Double) quantitySpinner.getValue(),
-                    (Double) amountSpinner.getValue(),
-                    (String) typeCombo.getSelectedItem(),
-                    descriptionArea.getText(),
-                    payedCheckBox.isSelected()
-            );
-            dispose();
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Error saving: " + e.getMessage());
-        }
-    }
-    private void loadMedicines() {
-        try {
-            List<Medicine> medicines = MedicineDAO.getAllMedicinesAsList();
-            medicines.forEach(medicineCombo::addItem);
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Error loading medicines: " + e.getMessage());
-        }
-    }
-    private void loadClients() {
-        try {
-            List<Client> clients = ClientDAO.getAllClientsAsList();
-            clients.forEach(clientCombo::addItem);
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Error loading clients: " + e.getMessage());
         }
     }
 }
