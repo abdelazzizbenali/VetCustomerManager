@@ -67,7 +67,7 @@ class DatabaseConnector {
         try {
             Class.forName("com.mysql.cj.jdbc.Driver");
         } catch (ClassNotFoundException e) {
-            throw new SQLException("MySQL Driver missing");
+            throw new SQLException("Database Driver missing");
         }
         Connection connection = DriverManager.getConnection("jdbc:mysql://localhost:3306", "root", "root");
         ensureDatabaseExists(connection);
