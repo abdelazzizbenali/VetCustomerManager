@@ -188,7 +188,7 @@ class MainWindow extends JFrame {
         tabbedPane.insertTab("Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))), new ClientPanel(), "Adding, editing and deleting client list here.", 1);
         tabbedPane.insertTab("Medicine Stock", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/medicine.png"))), new MedicinePanel(), "Updating medicine stock here.", 2);
         tabbedPane.insertTab("Appointments", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/calendar.png"))), new AppointmentPanel(), "Adding clients appointment.", 3);
-        tabbedPane.insertTab("Settings", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/reglage.png"))), new SettingPanel(), "Change the settings bout this program.", 4);
+        tabbedPane.insertTab("Settings", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/reglage.png"))), new SettingPanel(), "Change the settings about this program.", 4);
         add(tabbedPane, BorderLayout.CENTER);
     }
 }
@@ -200,12 +200,11 @@ class DailyUsagePanel extends JPanel {
     private final JComboBox<String> typeCombo = new JComboBox<>(new String[]{"Consultation", "Treatment", "Product"});
     private final JTextArea descriptionArea = new JTextArea();
     private final JCheckBox payedCheckBox = new JCheckBox("Payed ?");
-    JTabbedPane tabbedPane = new JTabbedPane();
+    private final JTabbedPane tabbedPane = new JTabbedPane();
     private JTable todayTable;
     private DefaultTableModel todayModel;
     private JTable historyTable;
     private DefaultTableModel historyModel;
-    private JLabel statusLabel;
 
     public DailyUsagePanel() {
         initializeUI();
@@ -320,14 +319,7 @@ class DailyUsagePanel extends JPanel {
         historyPanel.add(new JScrollPane(historyTable), BorderLayout.CENTER);
         tabbedPane.insertTab("Today Transactions", new ImageIcon(), todayPanel, "Transactions happened today", 0);
         tabbedPane.insertTab("Transaction's History", new ImageIcon(), historyPanel, "Transaction's history", 1);
-        statusLabel = new JLabel(" Ready");
-        statusLabel.setBackground(new Color(0, 0, 0));
-        statusLabel.setForeground(Color.WHITE);
-        statusLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
-        statusLabel.setOpaque(true);
-        statusLabel.setFont(new Font("DejaVu",Font.PLAIN,18));
         add(tabbedPane, BorderLayout.CENTER);
-        add(statusLabel, BorderLayout.SOUTH);
     }
     private void addButton(JToolBar bar, String text, ImageIcon icon, ActionListener action) {
         JButton btn = new JButton(text);
@@ -357,7 +349,6 @@ class DailyUsagePanel extends JPanel {
                         rs.getBoolean("payer")
                 });
             }
-            statusLabel.setText("Loaded " + todayModel.getRowCount() + " transaction.");
         } catch (SQLException e) {
             showError("Error loading today's data: " + e.getMessage());
         }
@@ -373,7 +364,6 @@ class DailyUsagePanel extends JPanel {
                         rs.getDouble("total_amount")
                 });
             }
-            statusLabel.setText("Loaded " + historyModel.getRowCount() + " date.");
         } catch (SQLException e) {
             showError("Error loading history: " + e.getMessage());
         }
