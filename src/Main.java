@@ -24,7 +24,7 @@ import java.util.List;
  **     Author: Parent: by AAB
  **/
 class VeterinaryDBMS {
-    public static void main(String[] args) throws SQLException {
+    public static void main() throws SQLException {
         DatabaseConnector.initializeDatabase();
         SwingUtilities.invokeLater(() -> {
             try {
@@ -218,7 +218,6 @@ class DailyUsagePanel extends JPanel {
         typeCombo.setFont(new Font("DejaVu",Font.BOLD,20));
         descriptionArea.setFont(new Font("DejaVu",Font.BOLD,20));
         payedCheckBox.setFont(new Font("DejaVu",Font.BOLD,20));
-        medicineCombo.setEditable(true);
         medicineCombo.setToolTipText("Medicine List");
         medicineCombo.setFont(new Font("DejaVu",Font.BOLD,20));
         medicineCombo.setRenderer(new DefaultListCellRenderer() {
@@ -231,7 +230,6 @@ class DailyUsagePanel extends JPanel {
             }
         });
         clientCombo.setFont(new Font("DejaVu",Font.BOLD,20));
-        clientCombo.setEditable(true);
         clientCombo.setRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
@@ -1017,6 +1015,26 @@ class MedicineDAO {
     public static ResultSet getAllMedicines() throws SQLException {
         return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT m.m_id, m.m_name, mi.m_size, mi.m_full_size, m.m_type, mi.m_buyPrice, mi.m_sellPrice, mi.m_expiryDate, mi.m_amount FROM medicines m JOIN medicinesInfo mi ON m.m_id = mi.m_id WHERE is_deleted = 0");
     }
+
+    public static List<Medicine> getAllMedicinesAsList(String term) throws SQLException {
+        List<Medicine> medicines = new ArrayList<>();
+        ResultSet rs = searchMedicinesByName(term);
+        while (rs.next()) {
+            medicines.add(new Medicine(
+                    rs.getInt("m_id"),
+                    rs.getString("m_name"),
+                    rs.getDouble("m_size"),
+                    rs.getDouble("m_full_size"),
+                    rs.getString("m_type"),
+                    rs.getDouble("m_buyPrice"),
+                    rs.getDouble("m_sellPrice"),
+                    rs.getDate("m_expiryDate").toLocalDate(),
+                    rs.getInt("m_amount")
+            ));
+        }
+        return medicines;
+    }
+
     public static List<Medicine> getAllMedicinesAsList() throws SQLException {
         List<Medicine> medicines = new ArrayList<>();
         ResultSet rs = getAllMedicines();
@@ -1074,8 +1092,7 @@ class MedicineDAO {
             stmt.executeUpdate();
         }
     }
-    public static void updateMedicineInfo(int m_id, double size, double fullSize, double buyPrice, double sellPrice,
-                                          LocalDate expiryDate, int amount) throws SQLException {
+    public static void updateMedicineInfo(int m_id, double size, double fullSize, double buyPrice, double sellPrice, LocalDate expiryDate, int amount) throws SQLException {
         String sql = "UPDATE medicinesInfo SET m_size = ?, m_full_size = ?, m_buyPrice = ?, m_sellPrice = ?, m_expiryDate = ?, m_amount = ? WHERE m_id = ?";
         try (Connection conn = DatabaseConnector.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -1099,8 +1116,7 @@ class MedicineDAO {
     }
     public static Medicine getMedicineById(int id) throws SQLException {
         String sql = "SELECT m.m_id, m.m_name, mi.m_size, mi.m_full_size, m.m_type, mi.m_buyPrice, mi.m_sellPrice, mi.m_expiryDate, mi.m_amount FROM medicines m JOIN medicinesInfo mi ON m.m_id = mi.m_id WHERE m.m_id = ?";
-        try (Connection conn = DatabaseConnector.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
+        try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement(sql)) {
             stmt.setInt(1, id);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
