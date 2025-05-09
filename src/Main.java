@@ -205,6 +205,7 @@ class DailyUsagePanel extends JPanel {
     private DefaultTableModel todayModel;
     private JTable historyTable;
     private DefaultTableModel historyModel;
+    JTextField medicineName = (JTextField) medicineCombo.getEditor().getEditorComponent();
 
     public DailyUsagePanel() {
         initializeUI();
@@ -227,6 +228,22 @@ class DailyUsagePanel extends JPanel {
                     value = ((Medicine) value).getName();
                 }
                 return super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            }
+        });
+        medicineCombo.setEditable(true);
+        medicineCombo.setSelectedIndex(-1);
+        medicineName.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                performSearch();
+            }
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                performSearch();
+            }
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                performSearch();
             }
         });
         clientCombo.setFont(new Font("DejaVu",Font.BOLD,20));
@@ -256,6 +273,7 @@ class DailyUsagePanel extends JPanel {
         formPanel.add(payedCheckBox);
         loadMedicines();
         loadClients();
+        medicineCombo.setSelectedIndex(-1);
         JButton btnSave = new JButton("Save");
         btnSave.addActionListener(_ -> saveTransaction());
         trPanel.add(formPanel, BorderLayout.CENTER);
@@ -318,6 +336,32 @@ class DailyUsagePanel extends JPanel {
         tabbedPane.insertTab("Today Transactions", new ImageIcon(), todayPanel, "Transactions happened today", 0);
         tabbedPane.insertTab("Transaction's History", new ImageIcon(), historyPanel, "Transaction's history", 1);
         add(tabbedPane, BorderLayout.CENTER);
+    }
+    private void performSearch() {
+        new SwingWorker<List<Medicine>, Void>() {
+            @Override
+            protected List<Medicine> doInBackground() throws Exception {
+                if (medicineName.getText().isEmpty()) {
+                    return MedicineDAO.getAllMedicinesAsList("");
+                } else {
+                    return MedicineDAO.getAllMedicinesAsList(medicineName.getText());
+                }
+            }
+            @Override
+            protected void done() {
+                try {
+                    List<Medicine> results = get();
+                    SwingUtilities.invokeLater(() -> {
+                        DefaultComboBoxModel<Medicine> model = new DefaultComboBoxModel<>();
+                        results.forEach(model::addElement);
+                        medicineCombo.setModel(model);
+                        medicineCombo.showPopup();
+                    });
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+            }
+        }.execute();
     }
     private void addButton(JToolBar bar, String text, ImageIcon icon, ActionListener action) {
         JButton btn = new JButton(text);
@@ -420,7 +464,7 @@ class DailyUsagePanel extends JPanel {
     }
     private void loadMedicines() {
         try {
-            List<Medicine> medicines = MedicineDAO.getAllMedicinesAsList();
+            List<Medicine> medicines = MedicineDAO.getAllMedicinesAsList("");
             medicines.forEach(medicineCombo::addItem);
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Error loading medicines: " + e.getMessage());
@@ -1015,29 +1059,9 @@ class MedicineDAO {
     public static ResultSet getAllMedicines() throws SQLException {
         return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT m.m_id, m.m_name, mi.m_size, mi.m_full_size, m.m_type, mi.m_buyPrice, mi.m_sellPrice, mi.m_expiryDate, mi.m_amount FROM medicines m JOIN medicinesInfo mi ON m.m_id = mi.m_id WHERE is_deleted = 0");
     }
-
     public static List<Medicine> getAllMedicinesAsList(String term) throws SQLException {
         List<Medicine> medicines = new ArrayList<>();
         ResultSet rs = searchMedicinesByName(term);
-        while (rs.next()) {
-            medicines.add(new Medicine(
-                    rs.getInt("m_id"),
-                    rs.getString("m_name"),
-                    rs.getDouble("m_size"),
-                    rs.getDouble("m_full_size"),
-                    rs.getString("m_type"),
-                    rs.getDouble("m_buyPrice"),
-                    rs.getDouble("m_sellPrice"),
-                    rs.getDate("m_expiryDate").toLocalDate(),
-                    rs.getInt("m_amount")
-            ));
-        }
-        return medicines;
-    }
-
-    public static List<Medicine> getAllMedicinesAsList() throws SQLException {
-        List<Medicine> medicines = new ArrayList<>();
-        ResultSet rs = getAllMedicines();
         while (rs.next()) {
             medicines.add(new Medicine(
                     rs.getInt("m_id"),
@@ -1601,7 +1625,7 @@ class TransactionDialog extends JDialog {
     }
     private void loadMedicines() {
         try {
-            List<Medicine> medicines = MedicineDAO.getAllMedicinesAsList();
+            List<Medicine> medicines = MedicineDAO.getAllMedicinesAsList("");
             medicines.forEach(medicineCombo::addItem);
             if (!medicines.isEmpty()) {
                 updateMaxQuantity();
