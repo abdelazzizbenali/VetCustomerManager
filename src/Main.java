@@ -28,7 +28,6 @@ class VeterinaryDBMS {
         DatabaseConnector.initializeDatabase();
         SwingUtilities.invokeLater(() -> {
             try {
-                Class.forName("mdlaf.MaterialLookAndFeel");
                 UIManager.setLookAndFeel(new MaterialLookAndFeel(new MaterialOceanicTheme()));
                 UIManager.put("TabbedPane.selected", Color.LIGHT_GRAY);
                 UIManager.put("TabbedPane.selectedForeground", Color.WHITE);
@@ -54,8 +53,6 @@ class VeterinaryDBMS {
                 UIManager.put("TextArea.font", new Font("Tahoma", Font.PLAIN, 18));
                 UIManager.put("Button.foreground", Color.WHITE);
                 new MainWindow().setVisible(true);
-            } catch (ClassNotFoundException e) {
-                throw new RuntimeException("Theme Class missing");
             } catch (Exception e) {
                 JOptionPane.showMessageDialog(null, "Error: " + e.getMessage());
             }
@@ -180,7 +177,8 @@ class MainWindow extends JFrame {
     }
     private void initializeUI() {
         setTitle("Veterinary Management System");
-        setSize(1400, 1000);
+        setUndecorated(true);
+        setSize(Toolkit.getDefaultToolkit().getScreenSize());
         setLocationRelativeTo(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         JTabbedPane tabbedPane = new JTabbedPane(SwingConstants.LEFT);
@@ -205,7 +203,7 @@ class DailyUsagePanel extends JPanel {
     private DefaultTableModel todayModel;
     private JTable historyTable;
     private DefaultTableModel historyModel;
-    JTextField medicineName = (JTextField) medicineCombo.getEditor().getEditorComponent();
+//    JTextField medicineName = (JTextField) medicineCombo.getEditor().getEditorComponent();
 
     public DailyUsagePanel() {
         initializeUI();
@@ -230,22 +228,78 @@ class DailyUsagePanel extends JPanel {
                 return super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
             }
         });
-        medicineCombo.setEditable(true);
-        medicineCombo.setSelectedIndex(-1);
-        medicineName.getDocument().addDocumentListener(new DocumentListener() {
-            @Override
-            public void insertUpdate(DocumentEvent e) {
-                performSearch();
-            }
-            @Override
-            public void removeUpdate(DocumentEvent e) {
-                performSearch();
-            }
-            @Override
-            public void changedUpdate(DocumentEvent e) {
-                performSearch();
-            }
-        });
+//        medicineCombo.setEditable(true);
+//        medicineCombo.getEditor().getEditorComponent().addKeyListener(new KeyAdapter() {
+//            @Override
+//            public void keyPressed(KeyEvent e) {
+//                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+//                    // Force selection only on Enter
+//                    Object selected = medicineCombo.getSelectedItem();
+//                    if (selected != null) {
+//                        medicineName.setText(selected.toString());
+//                    }
+//                } else {
+//                    super.keyPressed(e);
+//                }
+//            }
+//        });
+//        medicineName.getDocument().addDocumentListener(new DocumentListener() {
+//            private final Timer timer = new Timer(300, e -> performSearch());
+//            @Override
+//            public void insertUpdate(DocumentEvent e) {
+//                triggerDelayedUpdate();
+//            }
+//            @Override
+//            public void removeUpdate(DocumentEvent e) {
+//                triggerDelayedUpdate();
+//            }
+//            @Override
+//            public void changedUpdate(DocumentEvent e) {}
+//            private void triggerDelayedUpdate() {
+//                timer.stop();
+//                timer.start();
+//            }
+//            private void performSearch() {
+//                new SwingWorker<List<Medicine>, Void>() {
+//                    @Override
+//                    protected List<Medicine> doInBackground() throws Exception {
+//                        return MedicineDAO.getAllMedicinesAsList(medicineName.getText());
+//                    }
+//                    @Override
+//                    protected void done() {
+//                        try {
+//                            List<Medicine> results = get();
+//                            SwingUtilities.invokeLater(() -> {
+//                                medicineCombo.removeAllItems();
+//                                DefaultComboBoxModel<Medicine> model = new DefaultComboBoxModel<>();
+//                                results.forEach(model::addElement);
+//                                medicineCombo.setPopupVisible(false);
+//                                medicineCombo.setSelectedItem(null);
+//                                medicineName.setText(medicineName.getText());
+//                                medicineCombo.setModel(model);
+//                                medicineCombo.setPopupVisible(true);
+//                            });
+//                        } catch (Exception ex) {
+//                            ex.printStackTrace();
+//                        }
+//                    }
+//                }.execute();
+//                String typedText = medicineName.getText().toLowerCase();
+//                try {
+//                    List<Medicine> items = new ArrayList<>(MedicineDAO.getAllMedicinesAsList(typedText));
+//                    SwingUtilities.invokeLater(() -> {
+//                        DefaultComboBoxModel<Medicine> model = new DefaultComboBoxModel<>();
+//                        items.forEach(model::addElement);
+//                        medicineCombo.setPopupVisible(false);
+//                        medicineCombo.setSelectedItem(null);
+//                        medicineName.setText(typedText);
+//                        medicineCombo.setPopupVisible(true);
+//                    });
+//                } catch (SQLException e) {
+//                    throw new RuntimeException(e);
+//                }
+//            }
+//        });
         clientCombo.setFont(new Font("DejaVu",Font.BOLD,20));
         clientCombo.setRenderer(new DefaultListCellRenderer() {
             @Override
@@ -273,7 +327,6 @@ class DailyUsagePanel extends JPanel {
         formPanel.add(payedCheckBox);
         loadMedicines();
         loadClients();
-        medicineCombo.setSelectedIndex(-1);
         JButton btnSave = new JButton("Save");
         btnSave.addActionListener(_ -> saveTransaction());
         trPanel.add(formPanel, BorderLayout.CENTER);
@@ -336,32 +389,6 @@ class DailyUsagePanel extends JPanel {
         tabbedPane.insertTab("Today Transactions", new ImageIcon(), todayPanel, "Transactions happened today", 0);
         tabbedPane.insertTab("Transaction's History", new ImageIcon(), historyPanel, "Transaction's history", 1);
         add(tabbedPane, BorderLayout.CENTER);
-    }
-    private void performSearch() {
-        new SwingWorker<List<Medicine>, Void>() {
-            @Override
-            protected List<Medicine> doInBackground() throws Exception {
-                if (medicineName.getText().isEmpty()) {
-                    return MedicineDAO.getAllMedicinesAsList("");
-                } else {
-                    return MedicineDAO.getAllMedicinesAsList(medicineName.getText());
-                }
-            }
-            @Override
-            protected void done() {
-                try {
-                    List<Medicine> results = get();
-                    SwingUtilities.invokeLater(() -> {
-                        DefaultComboBoxModel<Medicine> model = new DefaultComboBoxModel<>();
-                        results.forEach(model::addElement);
-                        medicineCombo.setModel(model);
-                        medicineCombo.showPopup();
-                    });
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-            }
-        }.execute();
     }
     private void addButton(JToolBar bar, String text, ImageIcon icon, ActionListener action) {
         JButton btn = new JButton(text);
@@ -911,7 +938,7 @@ class MedicinePanel extends JPanel {
         try {
             ResultSet rs;
             if (searchTerm.isEmpty()) {
-                rs = MedicineDAO.getAllMedicines();
+                rs = MedicineDAO.searchMedicinesByName("");
             } else {
                 rs = MedicineDAO.searchMedicinesByName(searchTerm);
             }
@@ -1056,23 +1083,13 @@ class SettingPanel extends JPanel {
     }
 }
 class MedicineDAO {
-    public static ResultSet getAllMedicines() throws SQLException {
-        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT m.m_id, m.m_name, mi.m_size, mi.m_full_size, m.m_type, mi.m_buyPrice, mi.m_sellPrice, mi.m_expiryDate, mi.m_amount FROM medicines m JOIN medicinesInfo mi ON m.m_id = mi.m_id WHERE is_deleted = 0");
-    }
     public static List<Medicine> getAllMedicinesAsList(String term) throws SQLException {
         List<Medicine> medicines = new ArrayList<>();
         ResultSet rs = searchMedicinesByName(term);
         while (rs.next()) {
             medicines.add(new Medicine(
                     rs.getInt("m_id"),
-                    rs.getString("m_name"),
-                    rs.getDouble("m_size"),
-                    rs.getDouble("m_full_size"),
-                    rs.getString("m_type"),
-                    rs.getDouble("m_buyPrice"),
-                    rs.getDouble("m_sellPrice"),
-                    rs.getDate("m_expiryDate").toLocalDate(),
-                    rs.getInt("m_amount")
+                    rs.getString("m_name")
             ));
         }
         return medicines;
@@ -1139,7 +1156,7 @@ class MedicineDAO {
         }
     }
     public static Medicine getMedicineById(int id) throws SQLException {
-        String sql = "SELECT m.m_id, m.m_name, mi.m_size, mi.m_full_size, m.m_type, mi.m_buyPrice, mi.m_sellPrice, mi.m_expiryDate, mi.m_amount FROM medicines m JOIN medicinesInfo mi ON m.m_id = mi.m_id WHERE m.m_id = ?";
+        String sql = "SELECT m.*, mi.* FROM medicines m JOIN medicinesInfo mi ON m.m_id = mi.m_id WHERE m.m_id = ?";
         try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement(sql)) {
             stmt.setInt(1, id);
             try (ResultSet rs = stmt.executeQuery()) {
@@ -1161,7 +1178,7 @@ class MedicineDAO {
         return null;
     }
     public static ResultSet searchMedicinesByName(String searchTerm) throws SQLException {
-        String sql = "SELECT m.m_id, m.m_name, mi.m_size, mi.m_full_size, m.m_type, mi.m_buyPrice, mi.m_sellPrice, mi.m_expiryDate, mi.m_amount FROM medicines m JOIN medicinesInfo mi ON m.m_id = mi.m_id WHERE m.m_name LIKE '%"+searchTerm+"%'";
+        String sql = "SELECT m.*, mi.* FROM medicines m JOIN medicinesInfo mi ON m.m_id = mi.m_id WHERE m.m_name LIKE '%"+searchTerm+"%'";
         return DatabaseConnector.getConnection().prepareStatement(sql).executeQuery(sql);
     }
     public static void sellPartialMedicine(int medicineId, double quantity) throws SQLException {
@@ -1354,13 +1371,13 @@ class AppointmentDAO {
 class Medicine {
     private final int id;
     private final String name;
-    private final double currentSize;
-    private final double fullSize;
-    private final String type;
-    private final double buyPrice;
-    private final double sellPrice;
-    private final LocalDate expiryDate;
-    private final int amount;
+    private double currentSize = 0;
+    private double fullSize = 0;
+    private String type = null;
+    private double buyPrice = 0;
+    private double sellPrice = 0;
+    private LocalDate expiryDate = null;
+    private int amount = 0;
     public Medicine(int id, String name, double currentSize, double fullSize, String type, double buyPrice, double sellPrice, LocalDate expiryDate, int amount) {
         this.id = id;
         this.name = name;
@@ -1371,6 +1388,10 @@ class Medicine {
         this.sellPrice = sellPrice;
         this.expiryDate = expiryDate;
         this.amount = amount;
+    }
+    public Medicine(int id, String name) {
+        this.id = id;
+        this.name = name;
     }
     public int getId() { return id; }
     public String getName() { return name; }
