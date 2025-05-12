@@ -3,6 +3,7 @@ import mdlaf.themes.*;
 import org.jdesktop.swingx.JXDatePicker;
 import org.jdesktop.swingx.JXTitledPanel;
 import javax.swing.*;
+import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -203,7 +204,7 @@ class DailyUsagePanel extends JPanel {
     private DefaultTableModel todayModel;
     private JTable historyTable;
     private DefaultTableModel historyModel;
-//    JTextField medicineName = (JTextField) medicineCombo.getEditor().getEditorComponent();
+    JTextField medicineName = (JTextField) medicineCombo.getEditor().getEditorComponent();
 
     public DailyUsagePanel() {
         initializeUI();
@@ -228,78 +229,78 @@ class DailyUsagePanel extends JPanel {
                 return super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
             }
         });
-//        medicineCombo.setEditable(true);
-//        medicineCombo.getEditor().getEditorComponent().addKeyListener(new KeyAdapter() {
-//            @Override
-//            public void keyPressed(KeyEvent e) {
-//                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-//                    // Force selection only on Enter
-//                    Object selected = medicineCombo.getSelectedItem();
-//                    if (selected != null) {
-//                        medicineName.setText(selected.toString());
-//                    }
-//                } else {
-//                    super.keyPressed(e);
-//                }
-//            }
-//        });
-//        medicineName.getDocument().addDocumentListener(new DocumentListener() {
-//            private final Timer timer = new Timer(300, e -> performSearch());
-//            @Override
-//            public void insertUpdate(DocumentEvent e) {
-//                triggerDelayedUpdate();
-//            }
-//            @Override
-//            public void removeUpdate(DocumentEvent e) {
-//                triggerDelayedUpdate();
-//            }
-//            @Override
-//            public void changedUpdate(DocumentEvent e) {}
-//            private void triggerDelayedUpdate() {
-//                timer.stop();
-//                timer.start();
-//            }
-//            private void performSearch() {
-//                new SwingWorker<List<Medicine>, Void>() {
-//                    @Override
-//                    protected List<Medicine> doInBackground() throws Exception {
-//                        return MedicineDAO.getAllMedicinesAsList(medicineName.getText());
-//                    }
-//                    @Override
-//                    protected void done() {
-//                        try {
-//                            List<Medicine> results = get();
-//                            SwingUtilities.invokeLater(() -> {
-//                                medicineCombo.removeAllItems();
-//                                DefaultComboBoxModel<Medicine> model = new DefaultComboBoxModel<>();
-//                                results.forEach(model::addElement);
-//                                medicineCombo.setPopupVisible(false);
-//                                medicineCombo.setSelectedItem(null);
-//                                medicineName.setText(medicineName.getText());
-//                                medicineCombo.setModel(model);
-//                                medicineCombo.setPopupVisible(true);
-//                            });
-//                        } catch (Exception ex) {
-//                            ex.printStackTrace();
-//                        }
-//                    }
-//                }.execute();
-//                String typedText = medicineName.getText().toLowerCase();
-//                try {
-//                    List<Medicine> items = new ArrayList<>(MedicineDAO.getAllMedicinesAsList(typedText));
-//                    SwingUtilities.invokeLater(() -> {
-//                        DefaultComboBoxModel<Medicine> model = new DefaultComboBoxModel<>();
-//                        items.forEach(model::addElement);
-//                        medicineCombo.setPopupVisible(false);
-//                        medicineCombo.setSelectedItem(null);
-//                        medicineName.setText(typedText);
-//                        medicineCombo.setPopupVisible(true);
-//                    });
-//                } catch (SQLException e) {
-//                    throw new RuntimeException(e);
-//                }
-//            }
-//        });
+        medicineCombo.setEditable(true);
+        medicineCombo.getEditor().getEditorComponent().addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    // Force selection only on Enter
+                    Object selected = medicineCombo.getSelectedItem();
+                    if (selected != null) {
+                        medicineName.setText(selected.toString());
+                    }
+                } else {
+                    super.keyPressed(e);
+                }
+            }
+        });
+        medicineName.getDocument().addDocumentListener(new DocumentListener() {
+            private final Timer timer = new Timer(300, e -> performSearch());
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                triggerDelayedUpdate();
+            }
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                triggerDelayedUpdate();
+            }
+            @Override
+            public void changedUpdate(DocumentEvent e) {}
+            private void triggerDelayedUpdate() {
+                timer.stop();
+                timer.start();
+            }
+            private void performSearch() {
+                new SwingWorker<List<Medicine>, Void>() {
+                    @Override
+                    protected List<Medicine> doInBackground() throws Exception {
+                        return MedicineDAO.getAllMedicinesAsList(medicineName.getText());
+                    }
+                    @Override
+                    protected void done() {
+                        try {
+                            List<Medicine> results = get();
+                            SwingUtilities.invokeLater(() -> {
+                                medicineCombo.removeAllItems();
+                                DefaultComboBoxModel<Medicine> model = new DefaultComboBoxModel<>();
+                                results.forEach(model::addElement);
+                                medicineCombo.setPopupVisible(false);
+                                medicineCombo.setSelectedItem(null);
+                                medicineName.setText(medicineName.getText());
+                                medicineCombo.setModel(model);
+                                medicineCombo.setPopupVisible(true);
+                            });
+                        } catch (Exception ex) {
+                            ex.printStackTrace();
+                        }
+                    }
+                }.execute();
+                String typedText = medicineName.getText().toLowerCase();
+                try {
+                    List<Medicine> items = new ArrayList<>(MedicineDAO.getAllMedicinesAsList(typedText));
+                    SwingUtilities.invokeLater(() -> {
+                        DefaultComboBoxModel<Medicine> model = new DefaultComboBoxModel<>();
+                        items.forEach(model::addElement);
+                        medicineCombo.setPopupVisible(false);
+                        medicineCombo.setSelectedItem(null);
+                        medicineName.setText(typedText);
+                        medicineCombo.setPopupVisible(true);
+                    });
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
         clientCombo.setFont(new Font("DejaVu",Font.BOLD,20));
         clientCombo.setRenderer(new DefaultListCellRenderer() {
             @Override
