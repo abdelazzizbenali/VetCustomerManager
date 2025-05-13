@@ -230,20 +230,7 @@ class DailyUsagePanel extends JPanel {
             }
         });
         medicineCombo.setEditable(true);
-        medicineCombo.getEditor().getEditorComponent().addKeyListener(new KeyAdapter() {
-            @Override
-            public void keyPressed(KeyEvent e) {
-                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-                    // Force selection only on Enter
-                    Object selected = medicineCombo.getSelectedItem();
-                    if (selected != null) {
-                        medicineName.setText(selected.toString());
-                    }
-                } else {
-                    super.keyPressed(e);
-                }
-            }
-        });
+        medicineCombo.getEditor().getEditorComponent();
         medicineName.getDocument().addDocumentListener(new DocumentListener() {
             private final Timer timer = new Timer(300, e -> performSearch());
             @Override
