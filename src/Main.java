@@ -3,10 +3,10 @@ import mdlaf.themes.*;
 import org.jdesktop.swingx.JXDatePicker;
 import org.jdesktop.swingx.JXTitledPanel;
 import javax.swing.*;
-import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.plaf.basic.BasicComboBoxEditor;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
@@ -178,8 +178,7 @@ class MainWindow extends JFrame {
     }
     private void initializeUI() {
         setTitle("Veterinary Management System");
-        setUndecorated(true);
-        setSize(Toolkit.getDefaultToolkit().getScreenSize());
+        setExtendedState(JFrame.MAXIMIZED_BOTH);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         JTabbedPane tabbedPane = new JTabbedPane(SwingConstants.LEFT);
@@ -193,7 +192,7 @@ class MainWindow extends JFrame {
 }
 class DailyUsagePanel extends JPanel {
     private final JComboBox<Client> clientCombo = new JComboBox<>();
-    private final JComboBox<Medicine> medicineCombo = new JComboBox<>();
+    private final JSearchableComboBox medicineCombo = new JSearchableComboBox();
     private final JSpinner quantitySpinner = new JSpinner(new SpinnerNumberModel(0.0, 0, 10000000, 1));
     private final JSpinner amountSpinner = new JSpinner(new SpinnerNumberModel(0.0, 0, 10000000, 100));
     private final JComboBox<String> typeCombo = new JComboBox<>(new String[]{"Consultation", "Treatment", "Product"});
@@ -204,7 +203,7 @@ class DailyUsagePanel extends JPanel {
     private DefaultTableModel todayModel;
     private JTable historyTable;
     private DefaultTableModel historyModel;
-    JTextField medicineName = (JTextField) medicineCombo.getEditor().getEditorComponent();
+//    JTextField medicineName = (JTextField) medicineCombo.getEditor().getEditorComponent();
 
     public DailyUsagePanel() {
         initializeUI();
@@ -220,74 +219,73 @@ class DailyUsagePanel extends JPanel {
         payedCheckBox.setFont(new Font("DejaVu",Font.BOLD,20));
         medicineCombo.setToolTipText("Medicine List");
         medicineCombo.setFont(new Font("DejaVu",Font.BOLD,20));
-        medicineCombo.setRenderer(new DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-                if (value instanceof Medicine) {
-                    value = ((Medicine) value).getName();
-                }
-                return super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-            }
-        });
-        medicineCombo.setEditable(true);
-        medicineCombo.getEditor().getEditorComponent();
-        medicineName.getDocument().addDocumentListener(new DocumentListener() {
-            private final Timer timer = new Timer(300, e -> performSearch());
-            @Override
-            public void insertUpdate(DocumentEvent e) {
-                triggerDelayedUpdate();
-            }
-            @Override
-            public void removeUpdate(DocumentEvent e) {
-                triggerDelayedUpdate();
-            }
-            @Override
-            public void changedUpdate(DocumentEvent e) {}
-            private void triggerDelayedUpdate() {
-                timer.stop();
-                timer.start();
-            }
-            private void performSearch() {
-                new SwingWorker<List<Medicine>, Void>() {
-                    @Override
-                    protected List<Medicine> doInBackground() throws Exception {
-                        return MedicineDAO.getAllMedicinesAsList(medicineName.getText());
-                    }
-                    @Override
-                    protected void done() {
-                        try {
-                            List<Medicine> results = get();
-                            SwingUtilities.invokeLater(() -> {
-                                medicineCombo.removeAllItems();
-                                DefaultComboBoxModel<Medicine> model = new DefaultComboBoxModel<>();
-                                results.forEach(model::addElement);
-                                medicineCombo.setPopupVisible(false);
-                                medicineCombo.setSelectedItem(null);
-                                medicineName.setText(medicineName.getText());
-                                medicineCombo.setModel(model);
-                                medicineCombo.setPopupVisible(true);
-                            });
-                        } catch (Exception ex) {
-                            ex.printStackTrace();
-                        }
-                    }
-                }.execute();
-                String typedText = medicineName.getText().toLowerCase();
-                try {
-                    List<Medicine> items = new ArrayList<>(MedicineDAO.getAllMedicinesAsList(typedText));
-                    SwingUtilities.invokeLater(() -> {
-                        DefaultComboBoxModel<Medicine> model = new DefaultComboBoxModel<>();
-                        items.forEach(model::addElement);
-                        medicineCombo.setPopupVisible(false);
-                        medicineCombo.setSelectedItem(null);
-                        medicineName.setText(typedText);
-                        medicineCombo.setPopupVisible(true);
-                    });
-                } catch (SQLException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-        });
+//        medicineCombo.setRenderer(new DefaultListCellRenderer() {
+//            @Override
+//            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+//                if (value instanceof Medicine) {
+//                    value = ((Medicine) value).getName();
+//                }
+//                return super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+//            }
+//        });
+//        medicineCombo.getEditor().getEditorComponent();
+//        medicineName.getDocument().addDocumentListener(new DocumentListener() {
+//            private final Timer timer = new Timer(300, _ -> performSearch());
+//            @Override
+//            public void insertUpdate(DocumentEvent e) {
+//                triggerDelayedUpdate();
+//            }
+//            @Override
+//            public void removeUpdate(DocumentEvent e) {
+//                triggerDelayedUpdate();
+//            }
+//            @Override
+//            public void changedUpdate(DocumentEvent e) {}
+//            private void triggerDelayedUpdate() {
+//                timer.stop();
+//                timer.start();
+//            }
+//            private void performSearch() {
+//                new SwingWorker<List<Medicine>, Void>() {
+//                    @Override
+//                    protected List<Medicine> doInBackground() throws Exception {
+//                        return MedicineDAO.getAllMedicinesAsList(medicineName.getText());
+//                    }
+//                    @Override
+//                    protected void done() {
+//                        try {
+//                            List<Medicine> results = get();
+//                            SwingUtilities.invokeLater(() -> {
+//                                medicineCombo.removeAllItems();
+//                                DefaultComboBoxModel<Medicine> model = new DefaultComboBoxModel<>();
+//                                results.forEach(model::addElement);
+//                                medicineCombo.setPopupVisible(false);
+//                                medicineCombo.setSelectedItem(null);
+//                                medicineName.setText(medicineName.getText());
+//                                medicineCombo.setModel(model);
+//                                medicineCombo.setPopupVisible(true);
+//                            });
+//                        } catch (Exception ex) {
+//                            ex.printStackTrace();
+//                        }
+//                    }
+//                }.execute();
+//                String typedText = medicineName.getText().toLowerCase();
+//                try {
+//                    List<Medicine> items = new ArrayList<>(MedicineDAO.getAllMedicinesAsList(typedText));
+//                    SwingUtilities.invokeLater(() -> {
+//                        DefaultComboBoxModel<Medicine> model = new DefaultComboBoxModel<>();
+//                        items.forEach(model::addElement);
+//                        medicineCombo.setPopupVisible(false);
+//                        medicineCombo.setSelectedItem(null);
+//                        medicineName.setText(typedText);
+//                        medicineCombo.setPopupVisible(true);
+//                    });
+//                } catch (SQLException e) {
+//                    throw new RuntimeException(e);
+//                }
+//            }
+//        });
         clientCombo.setFont(new Font("DejaVu",Font.BOLD,20));
         clientCombo.setRenderer(new DefaultListCellRenderer() {
             @Override
@@ -1789,5 +1787,218 @@ class AppointmentDialog extends JDialog {
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Error adding appointment: " + e.getMessage());
         }
+    }
+}
+
+class JSearchableComboBox extends JComboBox {
+    public JSearchableComboBox () {
+        super();
+        init();
+    }
+    public JSearchableComboBox (Object[] elements) {
+        super(elements);
+        init();
+    }
+    public void setModel (ComboBoxModel model) {
+        super.setModel (model);
+        init ();
+    }
+    private void init () {
+        setEditable(true);
+        setEditor(new SearchEditor (this));
+    }
+    private static class SearchEditor extends BasicComboBoxEditor {
+        private final TernarySearchTree _data = new TernarySearchTree ();
+        public Object getItem () {
+            return _data.get (super.getItem ().toString ());
+        }
+        public SearchEditor (final JSearchableComboBox cb) {
+            ComboBoxModel model = cb.getModel ();
+            for (int i = 0; i < model.getSize (); i++) {
+                Object data = model.getElementAt (i);
+                _data.put (data.toString (), data);
+            }
+            KeyAdapter listener = new KeyAdapter () {
+                public void keyReleased (KeyEvent ev) {
+                    if ((ev.getKeyChar() >= 'a' && ev.getKeyChar () <= 'z') ||
+                            (ev.getKeyChar () >= '0' && ev.getKeyChar () <= '9') ||
+                            (ev.getKeyChar () >= 'A' && ev.getKeyChar () <= 'Z') ||
+                            (ev.getKeyChar () == KeyEvent.VK_SPACE))
+                    {
+                        String startText = editor.getText ();
+                        String finalText = _data.matchPrefixString (startText, 1);
+                        if (finalText.isEmpty()) finalText = startText;
+                        if (! finalText.equals (startText)) {
+                            editor.setText (finalText);
+                            editor.setSelectionStart (startText.length ());
+                            editor.setSelectionEnd (finalText.length ());
+                        }
+                        cb.setSelectedItem (_data.get (finalText));
+                    }
+                }
+            };
+            editor.addKeyListener (listener);
+            ActionListener actionListener = _ -> {
+                if (cb.getSelectedItem () != null &&
+                        ! editor.getText ().equals (cb.getSelectedItem ().toString ())) {
+                    editor.setText (cb.getSelectedItem ().toString ());
+                }
+            };
+            cb.addActionListener (actionListener);
+        }
+    }
+}
+class TernarySearchTree {
+    private TSTNode rootNode;
+    private int lastNumberOfReturnValues;
+    public void put(String key, Object value) {
+        getOrCreateNode(key).data = value;
+    }
+    public Object get(String key) {
+        TSTNode node = getNode(key);
+        if(node==null) return null;
+        return node.data;
+    }
+    private int checkNumberOfReturnValues(int numReturnValues) {
+        return ((numReturnValues < 0) ? -1 : numReturnValues);
+    }
+    public TSTNode getNode(String key) {
+        return getNode(key, rootNode);
+    }
+    protected TSTNode getNode(String key, TSTNode startNode) {
+        if(key == null || startNode == null || key.isEmpty()) return null;
+        TSTNode currentNode = startNode;
+        int charIndex = 0;
+        while(true) {
+            if(currentNode == null) return null;
+            int charComp = CharUtility.compareCharsAlphabetically(key.charAt(charIndex), currentNode.splitchar);
+            if (charComp == 0) {
+                charIndex++;
+                if(charIndex == key.length()) return currentNode;
+                currentNode = currentNode.relatives[TSTNode.EQKID];
+            } else if(charComp < 0) {
+                currentNode = currentNode.relatives[TSTNode.LOKID];
+            } else {
+                currentNode = currentNode.relatives[TSTNode.HIKID];
+            }
+        }
+    }
+    public String matchPrefixString(String prefix, int numReturnValues) {
+        TSTNode startNode = getNode(prefix);
+        if(startNode == null) return "";
+        sortKeysNumReturnValues = checkNumberOfReturnValues(numReturnValues);
+        lastNumberOfReturnValues = sortKeysNumReturnValues;
+        sortKeysBuffer = new StringBuffer();
+        if(startNode.data != null) {
+            sortKeysBuffer.append(getKey(startNode) + "\n");
+            sortKeysNumReturnValues--;
+        }
+        sortKeysList = false;
+        sortKeysRecursion(startNode.relatives[TSTNode.EQKID]);
+        int bufferLength = sortKeysBuffer.length();
+        if(bufferLength > 0) sortKeysBuffer.setLength(bufferLength - 1);
+        lastNumberOfReturnValues = lastNumberOfReturnValues - sortKeysNumReturnValues;
+        return sortKeysBuffer.toString();
+    }
+    private DoublyLinkedList sortKeysResult;
+    private boolean sortKeysList;
+    private StringBuffer sortKeysBuffer;
+    private int sortKeysNumReturnValues;
+    private void sortKeysRecursion(TSTNode currentNode) {
+        if(currentNode == null) return;
+        sortKeysRecursion(currentNode.relatives[TSTNode.LOKID]);
+        if(sortKeysNumReturnValues == 0) return;
+        if(currentNode.data != null) {
+            if(sortKeysList) {
+                sortKeysResult.addLast(getKey(currentNode));
+            } else {
+                sortKeysBuffer.append(getKey(currentNode) + "\n");
+            }
+            sortKeysNumReturnValues--;
+        }
+        sortKeysRecursion(currentNode.relatives[TSTNode.EQKID]);
+        sortKeysRecursion(currentNode.relatives[TSTNode.HIKID]);
+    }
+    protected TSTNode getOrCreateNode(String key) throws NullPointerException, IllegalArgumentException {
+        if(key == null) throw new NullPointerException("attempt to get or create node with null key");
+        if(key.isEmpty()) throw new IllegalArgumentException("attempt to get or create node with key of zero length");
+        if(rootNode==null) rootNode = new TSTNode(key.charAt(0), null);
+        TSTNode currentNode = rootNode;
+        int charIndex = 0;
+        while(true) {
+            int charComp = CharUtility.compareCharsAlphabetically(key.charAt(charIndex), currentNode.splitchar);
+            if (charComp == 0) {
+                charIndex++;
+                if(charIndex == key.length()) return currentNode;
+                if(currentNode.relatives[TSTNode.EQKID] == null) currentNode.relatives[TSTNode.EQKID] = new TSTNode(key.charAt(charIndex), currentNode);
+                currentNode = currentNode.relatives[TSTNode.EQKID];
+            } else if(charComp < 0) {
+                if(currentNode.relatives[TSTNode.LOKID] == null) currentNode.relatives[TSTNode.LOKID] = new TSTNode(key.charAt(charIndex), currentNode);
+                currentNode = currentNode.relatives[TSTNode.LOKID];
+            } else {
+                if(currentNode.relatives[TSTNode.HIKID] == null) currentNode.relatives[TSTNode.HIKID] = new TSTNode(key.charAt(charIndex), currentNode);
+                currentNode = currentNode.relatives[TSTNode.HIKID];
+            }
+        }
+    }
+    protected static class TSTNode {
+        protected static final int PARENT = 0, LOKID = 1, EQKID = 2, HIKID = 3;
+        protected char splitchar;
+        protected TSTNode[] relatives = new TSTNode[4];
+        protected Object data;
+        protected TSTNode(char splitchar, TSTNode parent) {
+            this.splitchar = splitchar;
+            relatives[PARENT] = parent;
+        }
+    }
+    private final StringBuffer getKeyBuffer = new StringBuffer();
+    protected String getKey(TSTNode node) {
+        getKeyBuffer.setLength(0);
+        getKeyBuffer.append(node.splitchar);
+        TSTNode currentNode, lastNode;
+        currentNode = node.relatives[TSTNode.PARENT];
+        lastNode = node;
+        while(currentNode != null) {
+            if(currentNode.relatives[TSTNode.EQKID] == lastNode) getKeyBuffer.append(currentNode.splitchar);
+            lastNode = currentNode;
+            currentNode = currentNode.relatives[TSTNode.PARENT];
+        }
+        getKeyBuffer.reverse();
+        return getKeyBuffer.toString();
+    }
+}
+class CharUtility {
+    public static int compareCharsAlphabetically(char cCompare, char cRef) {
+        return (alphabetizeChar(cCompare) - alphabetizeChar(cRef));
+    }
+    private static int alphabetizeChar(char c) {
+        if(c < 65) return c;
+        if(c < 89) return (2 * c) - 65;
+        if(c < 97) return c + 24;
+        if(c < 121) return (2 * c) - 128;
+        return c;
+    }
+}
+class DoublyLinkedList {
+    private DLLNode head, last;
+    private int size = 0;
+    public void addLast(Object data) {
+        DLLNode newNode = new DLLNode();
+        newNode.data = data;
+        if (size == 0) {
+            head = newNode;
+        } else {
+            last.nextNode = newNode;
+            newNode.previousNode = last;
+        }
+        last = newNode;
+        size++;
+    }
+    public int size() {
+        return size;
+    }
+    protected static class DLLNode {
+        protected DLLNode nextNode, previousNode;
+        protected Object data;
     }
 }
