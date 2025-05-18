@@ -1983,6 +1983,7 @@ class CharUtility {
 class DoublyLinkedList {
     private DLLNode head, last;
     private int size = 0;
+
     public void addLast(Object data) {
         DLLNode newNode = new DLLNode();
         newNode.data = data;
@@ -1995,10 +1996,13 @@ class DoublyLinkedList {
         last = newNode;
         size++;
     }
+
     public int size() {
         return size;
     }
+
     protected static class DLLNode {
         protected DLLNode nextNode, previousNode;
         protected Object data;
     }
+}
