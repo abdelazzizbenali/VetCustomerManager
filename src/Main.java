@@ -2002,4 +2002,3 @@ class DoublyLinkedList {
         protected DLLNode nextNode, previousNode;
         protected Object data;
     }
-}
