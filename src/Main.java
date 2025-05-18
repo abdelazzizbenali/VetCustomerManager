@@ -87,13 +87,14 @@ class DatabaseConnector {
                     "  m_id INT PRIMARY KEY AUTO_INCREMENT," +
                     "  m_name VARCHAR(100) NOT NULL," +
                     "  m_type VARCHAR(100) NOT NULL" +
+                    "  is_deleted TINYINT(1) DEFAULT 0," +
                     ")ENGINE=InnoDB");
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS medicinesInfo (" +
                     "  m_id INT PRIMARY KEY," +
                     "  m_size DECIMAL(10,2) NOT NULL," +
                     "  m_full_size DECIMAL(10,2) NOT NULL," +
                     "  m_buyPrice DECIMAL(10,2) NOT NULL," +
-                    "  m_sellPrice DECIMAL(10,2) NOT NULL," +
+                    "  m_sellPrice DEC IMAL(10,2) NOT NULL," +
                     "  m_expiryDate DATE NOT NULL," +
                     "  m_amount INT NOT NULL," +
                     "  m_seller VARCHAR(100)," +
