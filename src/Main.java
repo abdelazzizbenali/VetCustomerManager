@@ -251,7 +251,8 @@ class MainWindow extends JFrame {
 }
 class DailyUsagePanel extends JPanel {
     private final JComboBox<Client> clientCombo = new JComboBox<>();
-    private final JSearchableComboBox medicineCombo = new JSearchableComboBox();
+//    private final JSearchableComboBox medicineCombo = new JSearchableComboBox();
+    private final JComboBox<Medicine> medicineCombo = new JComboBox<>();
     private final JSpinner quantitySpinner = new JSpinner(new SpinnerNumberModel(0.0, 0, 10000000, 1));
     private final JSpinner amountSpinner = new JSpinner(new SpinnerNumberModel(0.0, 0, 10000000, 100));
     private final JComboBox<String> typeCombo = new JComboBox<>(new String[]{"Consultation", "Treatment", "Product"});
@@ -276,17 +277,16 @@ class DailyUsagePanel extends JPanel {
         typeCombo.setFont(new Font("DejaVu",Font.BOLD,20));
         descriptionArea.setFont(new Font("DejaVu",Font.BOLD,20));
         payedCheckBox.setFont(new Font("DejaVu",Font.BOLD,20));
-        medicineCombo.setToolTipText("Medicine List");
         medicineCombo.setFont(new Font("DejaVu",Font.BOLD,20));
-//        medicineCombo.setRenderer(new DefaultListCellRenderer() {
-//            @Override
-//            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-//                if (value instanceof Medicine) {
-//                    value = ((Medicine) value).getName();
-//                }
-//                return super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-//            }
-//        });
+        medicineCombo.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                if (value instanceof Medicine) {
+                    value = ((Medicine) value).getName();
+                }
+                return super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            }
+        });
 //        medicineCombo.getEditor().getEditorComponent();
 //        medicineName.getDocument().addDocumentListener(new DocumentListener() {
 //            private final Timer timer = new Timer(300, _ -> performSearch());
@@ -434,6 +434,8 @@ class DailyUsagePanel extends JPanel {
         tabbedPane.insertTab("Today Transactions", new ImageIcon(), todayPanel, "Transactions happened today", 0);
         tabbedPane.insertTab("Transaction's History", new ImageIcon(), historyPanel, "Transaction's history", 1);
         add(tabbedPane, BorderLayout.CENTER);
+        revalidate();
+        repaint();
     }
     private void addButton(JToolBar bar, String text, ImageIcon icon, ActionListener action) {
         JButton btn = new JButton(text);
@@ -589,6 +591,8 @@ class DailyTransactionsPanel extends JPanel {
         statusLabel.setFont(new Font("DejaVu", Font.PLAIN, 18));
         add(new JScrollPane(table), BorderLayout.CENTER);
         add(statusLabel, BorderLayout.SOUTH);
+        revalidate();
+        repaint();
     }
     private void loadData() {
         try {
@@ -679,6 +683,8 @@ class ClientPanel extends JPanel {
         add(toolBar, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
         add(statusLabel, BorderLayout.SOUTH);
+        revalidate();
+        repaint();
     }
     private void addButton(JToolBar bar, String text, ImageIcon icon, String tooltip, ActionListener action, int shortKey) {
         JButton btn = new JButton(text);
@@ -814,6 +820,8 @@ class TransactionPanel extends JPanel {
         add(toolBar, BorderLayout.NORTH);
         add(new JScrollPane(transactionTable), BorderLayout.CENTER);
         add(statusLabel, BorderLayout.SOUTH);
+        revalidate();
+        repaint();
     }
     private void addButton(JToolBar bar, String text, ImageIcon icon, String tooltip, ActionListener action) {
         JButton btn = new JButton(text);
@@ -964,6 +972,8 @@ class MedicinePanel extends JPanel {
         add(toolBar, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
         add(statusLabel, BorderLayout.SOUTH);
+        revalidate();
+        repaint();
     }
     private void addButton(JToolBar bar, String text, ImageIcon icon, String tooltip, ActionListener action, int shortKey) {
         JButton btn = new JButton(text);
@@ -1050,11 +1060,13 @@ class MedicinePanel extends JPanel {
 class AppointmentPanel extends JPanel {
     public AppointmentPanel() {
         initializeUI();
-        refreshData();
     }
     public void initializeUI() {
         setBorder(new EmptyBorder(20, 20, 20, 20));
         setLayout(new GridLayout(5, 7, 10, 10));
+        refreshData();
+        revalidate();
+        repaint();
     }
     public void refreshData() {
         removeAll();
