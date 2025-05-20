@@ -189,7 +189,8 @@ class MainWindow extends JFrame {
         setExtendedState(JFrame.MAXIMIZED_BOTH);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        buttons.setLayout(new GridLayout(1, 5));
+        mainPanel.setLayout(new CardLayout());
+        buttons.setLayout(new GridLayout(0, 5));
         buttons.setFloatable(false);
         addButton(buttons, "Daily Usage", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/home.png"))), _ -> showPanel("DAILYUSAGE"));
         addButton(buttons, "Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))), _ -> showPanel("CLIENTS"));
@@ -197,7 +198,7 @@ class MainWindow extends JFrame {
         addButton(buttons, "Appointments", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/calendar.png"))), _ -> showPanel("APPOINTMENTS"));
         addButton(buttons, "Settings", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/reglage.png"))), _ -> showPanel("SETTINGS"));
         add(buttons, BorderLayout.NORTH);
-        add(mainPanel, BorderLayout.SOUTH);
+        add(mainPanel, BorderLayout.CENTER);
 //        JTabbedPane tabbedPane = new JTabbedPane(SwingConstants.LEFT);
 //        tabbedPane.insertTab("Daily Usage", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/home.png"))), new DailyUsagePanel(), "Adding daily transaction here.", 0);
 //        tabbedPane.insertTab("Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))), new ClientPanel(), "Adding, editing and deleting client list here.", 1);
@@ -207,30 +208,36 @@ class MainWindow extends JFrame {
 //        add(tabbedPane, BorderLayout.CENTER);
     }
     private void showPanel(String panelName) {
-        CardLayout cl = (CardLayout) mainPanel.getLayout();
-        cl.show(mainPanel, panelName);
+//        CardLayout cl = (CardLayout) mainPanel.getLayout();
+//        cl.show(mainPanel, panelName);
         switch (panelName) {
             case "DAILYUSAGE" -> {
                 mainPanel.removeAll();
                 mainPanel.add(dailyUsagePanel, "DAILYUSAGE");
+                dailyUsagePanel.refreshData();
             }
             case "CLIENTS" -> {
                 mainPanel.removeAll();
                 mainPanel.add(clientPanel, "CLIENTS");
+                clientPanel.refreshData();
             }
             case "MEDICINES" -> {
                 mainPanel.removeAll();
                 mainPanel.add(medicinePanel, "MEDICINES");
+                medicinePanel.refreshData();
             }
             case "APPOINTMENTS" -> {
                 mainPanel.removeAll();
                 mainPanel.add(appointmentPanel, "APPOINTMENTS");
+                appointmentPanel.refreshData();
             }
             case "SETTINGS" -> {
                 mainPanel.removeAll();
                 mainPanel.add(settingPanel, "SETTINGS");
             }
         }
+        mainPanel.revalidate();
+        mainPanel.repaint();
     }
     private void addButton(JToolBar bar, String text, ImageIcon icon, ActionListener action) {
         JButton btn = new JButton(text);
