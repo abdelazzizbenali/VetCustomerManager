@@ -176,6 +176,11 @@ class DatabaseConnector {
 class MainWindow extends JFrame {
     private final JPanel mainPanel = new JPanel();
     private final JToolBar buttons = new JToolBar();
+    private final DailyUsagePanel dailyUsagePanel = new DailyUsagePanel();
+    private final ClientPanel clientPanel = new ClientPanel();
+    private final MedicinePanel medicinePanel = new MedicinePanel();
+    private final AppointmentPanel appointmentPanel = new AppointmentPanel();
+    private final SettingPanel settingPanel = new SettingPanel();
     public MainWindow() {
         initializeUI();
     }
@@ -192,7 +197,7 @@ class MainWindow extends JFrame {
         addButton(buttons, "Appointments", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/calendar.png"))), _ -> showPanel("APPOINTMENTS"));
         addButton(buttons, "Settings", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/reglage.png"))), _ -> showPanel("SETTINGS"));
         add(buttons, BorderLayout.NORTH);
-        add(mainPanel, BorderLayout.CENTER);
+        add(mainPanel, BorderLayout.SOUTH);
 //        JTabbedPane tabbedPane = new JTabbedPane(SwingConstants.LEFT);
 //        tabbedPane.insertTab("Daily Usage", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/home.png"))), new DailyUsagePanel(), "Adding daily transaction here.", 0);
 //        tabbedPane.insertTab("Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))), new ClientPanel(), "Adding, editing and deleting client list here.", 1);
@@ -205,11 +210,26 @@ class MainWindow extends JFrame {
         CardLayout cl = (CardLayout) mainPanel.getLayout();
         cl.show(mainPanel, panelName);
         switch (panelName) {
-            case "DAILYUSAGE" -> mainPanel.add(new DailyUsagePanel(), "DAILYUSAGE");
-            case "CLIENTS" -> mainPanel.add(new ClientPanel(), "CLIENTS");
-            case "MEDICINES" -> mainPanel.add(new MedicinePanel(), "MEDICINES");
-            case "APPOINTMENTS" -> mainPanel.add(new AppointmentPanel(), "APPOINTMENTS");
-            case "SETTINGS" -> mainPanel.add(new SettingPanel(), "SETTINGS");
+            case "DAILYUSAGE" -> {
+                mainPanel.removeAll();
+                mainPanel.add(dailyUsagePanel, "DAILYUSAGE");
+            }
+            case "CLIENTS" -> {
+                mainPanel.removeAll();
+                mainPanel.add(clientPanel, "CLIENTS");
+            }
+            case "MEDICINES" -> {
+                mainPanel.removeAll();
+                mainPanel.add(medicinePanel, "MEDICINES");
+            }
+            case "APPOINTMENTS" -> {
+                mainPanel.removeAll();
+                mainPanel.add(appointmentPanel, "APPOINTMENTS");
+            }
+            case "SETTINGS" -> {
+                mainPanel.removeAll();
+                mainPanel.add(settingPanel, "SETTINGS");
+            }
         }
     }
     private void addButton(JToolBar bar, String text, ImageIcon icon, ActionListener action) {
