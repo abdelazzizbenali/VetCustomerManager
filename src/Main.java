@@ -86,15 +86,15 @@ class DatabaseConnector {
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS medicines (" +
                     "  m_id INT PRIMARY KEY AUTO_INCREMENT," +
                     "  m_name VARCHAR(100) NOT NULL," +
-                    "  m_type VARCHAR(100) NOT NULL" +
-                    "  is_deleted TINYINT(1) DEFAULT 0," +
+                    "  m_type VARCHAR(100) NOT NULL," +
+                    "  is_deleted TINYINT(1) DEFAULT 0" +
                     ")ENGINE=InnoDB");
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS medicinesInfo (" +
                     "  m_id INT PRIMARY KEY," +
                     "  m_size DECIMAL(10,2) NOT NULL," +
                     "  m_full_size DECIMAL(10,2) NOT NULL," +
                     "  m_buyPrice DECIMAL(10,2) NOT NULL," +
-                    "  m_sellPrice DEC IMAL(10,2) NOT NULL," +
+                    "  m_sellPrice DECIMAL(10,2) NOT NULL," +
                     "  m_expiryDate DATE NOT NULL," +
                     "  m_amount INT NOT NULL," +
                     "  m_seller VARCHAR(100)," +
@@ -174,6 +174,8 @@ class DatabaseConnector {
     }
 }
 class MainWindow extends JFrame {
+    private final JPanel mainPanel = new JPanel();
+    private final JToolBar buttons = new JToolBar();
     public MainWindow() {
         initializeUI();
     }
@@ -182,13 +184,42 @@ class MainWindow extends JFrame {
         setExtendedState(JFrame.MAXIMIZED_BOTH);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        JTabbedPane tabbedPane = new JTabbedPane(SwingConstants.LEFT);
-        tabbedPane.insertTab("Daily Usage", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/home.png"))), new DailyUsagePanel(), "Adding daily transaction here.", 0);
-        tabbedPane.insertTab("Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))), new ClientPanel(), "Adding, editing and deleting client list here.", 1);
-        tabbedPane.insertTab("Medicine Stock", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/medicine.png"))), new MedicinePanel(), "Updating medicine stock here.", 2);
-        tabbedPane.insertTab("Appointments", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/calendar.png"))), new AppointmentPanel(), "Adding clients appointment.", 3);
-        tabbedPane.insertTab("Settings", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/reglage.png"))), new SettingPanel(), "Change the settings about this program.", 4);
-        add(tabbedPane, BorderLayout.CENTER);
+        buttons.setLayout(new GridLayout(1, 5));
+        buttons.setFloatable(false);
+        addButton(buttons, "Daily Usage", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/home.png"))), _ -> showPanel("DAILYUSAGE"));
+        addButton(buttons, "Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))), _ -> showPanel("CLIENTS"));
+        addButton(buttons, "Medicine Stock", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/medicine.png"))), _ -> showPanel("MEDICINES"));
+        addButton(buttons, "Appointments", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/calendar.png"))), _ -> showPanel("APPOINTMENTS"));
+        addButton(buttons, "Settings", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/reglage.png"))), _ -> showPanel("SETTINGS"));
+        add(buttons, BorderLayout.NORTH);
+        add(mainPanel, BorderLayout.CENTER);
+//        JTabbedPane tabbedPane = new JTabbedPane(SwingConstants.LEFT);
+//        tabbedPane.insertTab("Daily Usage", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/home.png"))), new DailyUsagePanel(), "Adding daily transaction here.", 0);
+//        tabbedPane.insertTab("Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))), new ClientPanel(), "Adding, editing and deleting client list here.", 1);
+//        tabbedPane.insertTab("Medicine Stock", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/medicine.png"))), new MedicinePanel(), "Updating medicine stock here.", 2);
+//        tabbedPane.insertTab("Appointments", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/calendar.png"))), new AppointmentPanel(), "Adding clients appointment.", 3);
+//        tabbedPane.insertTab("Settings", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/reglage.png"))), new SettingPanel(), "Change the settings about this program.", 4);
+//        add(tabbedPane, BorderLayout.CENTER);
+    }
+    private void showPanel(String panelName) {
+        CardLayout cl = (CardLayout) mainPanel.getLayout();
+        cl.show(mainPanel, panelName);
+        switch (panelName) {
+            case "DAILYUSAGE" -> mainPanel.add(new DailyUsagePanel(), "DAILYUSAGE");
+            case "CLIENTS" -> mainPanel.add(new ClientPanel(), "CLIENTS");
+            case "MEDICINES" -> mainPanel.add(new MedicinePanel(), "MEDICINES");
+            case "APPOINTMENTS" -> mainPanel.add(new AppointmentPanel(), "APPOINTMENTS");
+            case "SETTINGS" -> mainPanel.add(new SettingPanel(), "SETTINGS");
+        }
+    }
+    private void addButton(JToolBar bar, String text, ImageIcon icon, ActionListener action) {
+        JButton btn = new JButton(text);
+        btn.addActionListener(action);
+        btn.setIcon(icon);
+        btn.setIconTextGap(15);
+        btn.setFont(new Font("DejaVu Bold", Font.PLAIN, 18));
+        btn.setPreferredSize(new Dimension(140,50));
+        bar.add(btn);
     }
 }
 class DailyUsagePanel extends JPanel {
@@ -1067,6 +1098,9 @@ class SettingPanel extends JPanel {
             String path = String.valueOf(new File(fileChooser.getSelectedFile().getAbsolutePath()));
             System.out.println(path);
         }
+    }
+
+    public void refreshData() {
     }
 }
 class MedicineDAO {
