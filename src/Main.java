@@ -174,13 +174,13 @@ class DatabaseConnector {
     }
 }
 class MainWindow extends JFrame {
-    private final JPanel mainPanel = new JPanel();
-    private final JToolBar buttons = new JToolBar();
-    private final DailyUsagePanel dailyUsagePanel = new DailyUsagePanel();
-    private final ClientPanel clientPanel = new ClientPanel();
-    private final MedicinePanel medicinePanel = new MedicinePanel();
-    private final AppointmentPanel appointmentPanel = new AppointmentPanel();
-    private final SettingPanel settingPanel = new SettingPanel();
+//    private final JPanel mainPanel = new JPanel();
+//    private final JToolBar buttons = new JToolBar();
+//    private final DailyUsagePanel dailyUsagePanel = new DailyUsagePanel();
+//    private final ClientPanel clientPanel = new ClientPanel();
+//    private final MedicinePanel medicinePanel = new MedicinePanel();
+//    private final AppointmentPanel appointmentPanel = new AppointmentPanel();
+//    private final SettingPanel settingPanel = new SettingPanel();
     public MainWindow() {
         initializeUI();
     }
@@ -189,65 +189,63 @@ class MainWindow extends JFrame {
         setExtendedState(JFrame.MAXIMIZED_BOTH);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        mainPanel.setLayout(new CardLayout());
-        buttons.setLayout(new GridLayout(0, 5));
-        buttons.setFloatable(false);
-        addButton(buttons, "Daily Usage", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/home.png"))), _ -> showPanel("DAILYUSAGE"));
-        addButton(buttons, "Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))), _ -> showPanel("CLIENTS"));
-        addButton(buttons, "Medicine Stock", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/medicine.png"))), _ -> showPanel("MEDICINES"));
-        addButton(buttons, "Appointments", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/calendar.png"))), _ -> showPanel("APPOINTMENTS"));
-        addButton(buttons, "Settings", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/reglage.png"))), _ -> showPanel("SETTINGS"));
-        add(buttons, BorderLayout.NORTH);
-        add(mainPanel, BorderLayout.CENTER);
-//        JTabbedPane tabbedPane = new JTabbedPane(SwingConstants.LEFT);
-//        tabbedPane.insertTab("Daily Usage", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/home.png"))), new DailyUsagePanel(), "Adding daily transaction here.", 0);
-//        tabbedPane.insertTab("Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))), new ClientPanel(), "Adding, editing and deleting client list here.", 1);
-//        tabbedPane.insertTab("Medicine Stock", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/medicine.png"))), new MedicinePanel(), "Updating medicine stock here.", 2);
-//        tabbedPane.insertTab("Appointments", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/calendar.png"))), new AppointmentPanel(), "Adding clients appointment.", 3);
-//        tabbedPane.insertTab("Settings", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/reglage.png"))), new SettingPanel(), "Change the settings about this program.", 4);
-//        add(tabbedPane, BorderLayout.CENTER);
+//        mainPanel.setLayout(new CardLayout());
+//        buttons.setLayout(new GridLayout(0, 5));
+//        buttons.setFloatable(false);
+//        addButton(buttons, "Daily Usage", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/home.png"))), _ -> showPanel("DAILYUSAGE"));
+//        addButton(buttons, "Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))), _ -> showPanel("CLIENTS"));
+//        addButton(buttons, "Medicine Stock", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/medicine.png"))), _ -> showPanel("MEDICINES"));
+//        addButton(buttons, "Appointments", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/calendar.png"))), _ -> showPanel("APPOINTMENTS"));
+//        addButton(buttons, "Settings", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/reglage.png"))), _ -> showPanel("SETTINGS"));
+//        add(buttons, BorderLayout.NORTH);
+//        add(mainPanel, BorderLayout.CENTER);
+        JTabbedPane tabbedPane = new JTabbedPane(SwingConstants.TOP);
+        tabbedPane.insertTab("Daily Usage", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/home.png"))), new DailyUsagePanel(), "Adding daily transaction here.", 0);
+        tabbedPane.insertTab("Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))), new ClientPanel(), "Adding, editing and deleting client list here.", 1);
+        tabbedPane.insertTab("Medicine Stock", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/medicine.png"))), new MedicinePanel(), "Updating medicine stock here.", 2);
+        tabbedPane.insertTab("Appointments", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/calendar.png"))), new AppointmentPanel(), "Adding clients appointment.", 3);
+        tabbedPane.insertTab("Settings", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/reglage.png"))), new SettingPanel(), "Change the settings about this program.", 4);
+        add(tabbedPane, BorderLayout.CENTER);
     }
-    private void showPanel(String panelName) {
-//        CardLayout cl = (CardLayout) mainPanel.getLayout();
-//        cl.show(mainPanel, panelName);
-        switch (panelName) {
-            case "DAILYUSAGE" -> {
-                mainPanel.removeAll();
-                mainPanel.add(dailyUsagePanel, "DAILYUSAGE");
-                dailyUsagePanel.refreshData();
-            }
-            case "CLIENTS" -> {
-                mainPanel.removeAll();
-                mainPanel.add(clientPanel, "CLIENTS");
-                clientPanel.refreshData();
-            }
-            case "MEDICINES" -> {
-                mainPanel.removeAll();
-                mainPanel.add(medicinePanel, "MEDICINES");
-                medicinePanel.refreshData();
-            }
-            case "APPOINTMENTS" -> {
-                mainPanel.removeAll();
-                mainPanel.add(appointmentPanel, "APPOINTMENTS");
-                appointmentPanel.refreshData();
-            }
-            case "SETTINGS" -> {
-                mainPanel.removeAll();
-                mainPanel.add(settingPanel, "SETTINGS");
-            }
-        }
-        mainPanel.revalidate();
-        mainPanel.repaint();
-    }
-    private void addButton(JToolBar bar, String text, ImageIcon icon, ActionListener action) {
-        JButton btn = new JButton(text);
-        btn.addActionListener(action);
-        btn.setIcon(icon);
-        btn.setIconTextGap(15);
-        btn.setFont(new Font("DejaVu Bold", Font.PLAIN, 18));
-        btn.setPreferredSize(new Dimension(140,50));
-        bar.add(btn);
-    }
+//    private void showPanel(String panelName) {
+//        switch (panelName) {
+//            case "DAILYUSAGE" -> {
+//                mainPanel.removeAll();
+//                mainPanel.add(dailyUsagePanel, "DAILYUSAGE");
+//                dailyUsagePanel.refreshData();
+//            }
+//            case "CLIENTS" -> {
+//                mainPanel.removeAll();
+//                mainPanel.add(clientPanel, "CLIENTS");
+//                clientPanel.refreshData();
+//            }
+//            case "MEDICINES" -> {
+//                mainPanel.removeAll();
+//                mainPanel.add(medicinePanel, "MEDICINES");
+//                medicinePanel.refreshData();
+//            }
+//            case "APPOINTMENTS" -> {
+//                mainPanel.removeAll();
+//                mainPanel.add(appointmentPanel, "APPOINTMENTS");
+//                appointmentPanel.refreshData();
+//            }
+//            case "SETTINGS" -> {
+//                mainPanel.removeAll();
+//                mainPanel.add(settingPanel, "SETTINGS");
+//            }
+//        }
+//        mainPanel.revalidate();
+//        mainPanel.repaint();
+//    }
+//    private void addButton(JToolBar bar, String text, ImageIcon icon, ActionListener action) {
+//        JButton btn = new JButton(text);
+//        btn.addActionListener(action);
+//        btn.setIcon(icon);
+//        btn.setIconTextGap(15);
+//        btn.setFont(new Font("DejaVu Bold", Font.PLAIN, 18));
+//        btn.setPreferredSize(new Dimension(140,50));
+//        bar.add(btn);
+//    }
 }
 class DailyUsagePanel extends JPanel {
     private final JComboBox<Client> clientCombo = new JComboBox<>();
@@ -475,7 +473,7 @@ class DailyUsagePanel extends JPanel {
             ResultSet rs = DailyUsageDAO.getDailySummary();
             while (rs.next()) {
                 historyModel.addRow(new Object[]{
-                        rs.getDate("date").toLocalDate()/*.format(DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy", Locale.FRENCH))*/,
+                        rs.getDate("date").toLocalDate(),
                         rs.getInt("transaction_count"),
                         rs.getDouble("total_amount")
                 });
@@ -573,6 +571,8 @@ class DailyUsagePanel extends JPanel {
 class DailyTransactionsPanel extends JPanel {
     private final LocalDate date;
     private DefaultTableModel model;
+    private JTable table;
+    private JLabel statusLabel;
     public DailyTransactionsPanel(LocalDate date) {
         this.date = date;
         initializeUI();
@@ -582,8 +582,8 @@ class DailyTransactionsPanel extends JPanel {
         setLayout(new BorderLayout());
         setSize(600, 500);
         model = new DefaultTableModel(new String[]{"Time", "Client", "Medicine", "Quantity", "Amount", "Type", "Description", "Payed"}, 0);
-        JTable table = new JTable(model);
-        JLabel statusLabel = new JLabel(" Loaded " + model.getRowCount() + " transaction.");
+        table = new JTable(model);
+        statusLabel = new JLabel();
         statusLabel.setBorder(new EmptyBorder(10, 15, 10, 15));
         statusLabel.setBackground(new Color(0, 0, 0));
         statusLabel.setForeground(Color.WHITE);
@@ -609,6 +609,7 @@ class DailyTransactionsPanel extends JPanel {
                         rs.getBoolean("payer")
                 });
             }
+            statusLabel.setText(" Loaded " + model.getRowCount() + " transaction.");
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Error loading data: " + e.getMessage());
         }
@@ -1110,6 +1111,7 @@ class SettingPanel extends JPanel {
     public SettingPanel() {
         initializeUI();
         loadSettings();
+        refreshData();
     }
     public void initializeUI() {
         setLayout(new GridLayout(0, 2, 5, 5));
@@ -1138,7 +1140,6 @@ class SettingPanel extends JPanel {
             System.out.println(path);
         }
     }
-
     public void refreshData() {
     }
 }
