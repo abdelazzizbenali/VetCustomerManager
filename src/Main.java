@@ -71,19 +71,19 @@ class DatabaseConnector {
         Connection connection = DriverManager.getConnection("jdbc:mysql://localhost:3306", "root", "root");
         ensureDatabaseExists(connection);
         connection.close();
-        return DriverManager.getConnection("jdbc:mysql://localhost:3306/VETMSDB", "root", "root");
+        return DriverManager.getConnection("jdbc:mysql://localhost:3306/parent", "root", "root");
     }
     public static void ensureDatabaseExists(Connection connection) throws SQLException {
         try (Statement stmt = connection.createStatement()) {
-            ResultSet rs = stmt.executeQuery("SHOW DATABASES WHERE Database = 'VETMSDB'");
+            ResultSet rs = stmt.executeQuery("SHOW DATABASES WHERE Database = 'parent'");
             if (!rs.next()) {
-                stmt.executeUpdate("CREATE DATABASE VETMSDB");
+                stmt.executeUpdate("CREATE DATABASE parent");
             }
         }
     }
     public static void initializeDatabase() throws SQLException {
         try (Statement stmt = getConnection().createStatement()) {
-            stmt.execute("USE VETMSDB");
+            stmt.execute("USE parent");
             ResultSet rs = stmt.executeQuery("SHOW TABLES IN VETMSDB");
             if (!rs.next()) {
                 stmt.executeUpdate("CREATE TABLE IF NOT EXISTS medicines (" +
@@ -855,7 +855,6 @@ class MedicinePanel extends JPanel {
     private DefaultTableModel tableModel;
     private JLabel statusLabel;
     private JTextField searchField;
-    private JPanel infoPanel;
     private final JLabel TMSP = new JLabel();
     private final JLabel TMBP = new JLabel();
     private final JLabel TSP = new JLabel();
@@ -888,7 +887,7 @@ class MedicinePanel extends JPanel {
         dataTable.removeColumn(dataTable.getColumnModel().getColumn(0));
         dataTable.setRowMargin(1);
         dataTable.setShowHorizontalLines(true);
-        infoPanel = new JPanel();
+        JPanel infoPanel = new JPanel();
         infoPanel.setBorder(new TitledBorder(new EmptyBorder(5,5,5,5),"Info Area"));
         infoPanel.setLayout(new GridLayout(5,0,5,5));
         infoPanel.add(new JLabel("Total Medicine Selling Price : "));
@@ -910,12 +909,10 @@ class MedicinePanel extends JPanel {
             public void insertUpdate(DocumentEvent e) {
                 refreshData();
             }
-
             @Override
             public void removeUpdate(DocumentEvent e) {
                 refreshData();
             }
-
             @Override
             public void changedUpdate(DocumentEvent e) {
                 refreshData();
@@ -982,26 +979,7 @@ class MedicinePanel extends JPanel {
         }
     }
     private void updateInfoPanel() {
-        double totalSellingPrice = 0;
-        double totalBuyingPrice = 0;
-        double totalMedicineSellingPrice = 0;
-        double totalMedicineBuyingPrice = 0;
-        int totalStock = 0;
-        for (int i = 0; i < tableModel.getRowCount(); i++) {
-            double sellPrice = (double) tableModel.getValueAt(i, 4);
-            double buyPrice = (double) tableModel.getValueAt(i, 5);
-            int amount = (int) tableModel.getValueAt(i, 7);
-            totalSellingPrice += sellPrice * amount;
-            totalBuyingPrice += buyPrice * amount;
-            totalMedicineSellingPrice += sellPrice;
-            totalMedicineBuyingPrice += buyPrice;
-            totalStock += amount;
-        }
-        TMSP.setText(String.format("%.2f DA", totalMedicineSellingPrice));
-        TMBP.setText(String.format("%.2f DA", totalMedicineBuyingPrice));
-        TSP.setText(String.format("%.2f DA", totalSellingPrice));
-        TBP.setText(String.format("%.2f DA", totalBuyingPrice));
-        TS.setText(String.valueOf(totalStock));
+
     }
     private void showAddDialog(ActionEvent e) {
         new MedicineDialog(null, "Add Medicine", -1).setVisible(true);
@@ -1229,6 +1207,7 @@ class MedicineDAO {
         String sql = "SELECT m.*, mi.* FROM medicines m JOIN medicinesInfo mi ON m.m_id = mi.m_id WHERE m.m_name LIKE '%"+searchTerm+"%'";
         return DatabaseConnector.getConnection().prepareStatement(sql).executeQuery(sql);
     }
+    public static
     public static void sellPartialMedicine(int medicineId, double quantity) throws SQLException {
         try (Connection conn = DatabaseConnector.getConnection();
              CallableStatement stmt = conn.prepareCall("{call SellMedicinePartial(?, ?)}")) {
