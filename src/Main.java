@@ -4,6 +4,7 @@ import org.jdesktop.swingx.JXDatePicker;
 import org.jdesktop.swingx.JXTitledPanel;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.TitledBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.plaf.basic.BasicComboBoxEditor;
@@ -30,7 +31,7 @@ class VeterinaryDBMS {
         SwingUtilities.invokeLater(() -> {
             try {
                 UIManager.setLookAndFeel(new MaterialLookAndFeel(new MaterialOceanicTheme()));
-                UIManager.put("TabbedPane.selected", Color.LIGHT_GRAY);
+                UIManager.put("TabbedPane.selected", Color.BLUE);
                 UIManager.put("TabbedPane.selectedForeground", Color.WHITE);
                 UIManager.put("Table.selectionBackground", Color.decode("#0C0C0C"));
                 UIManager.put("Table.selectionForeground", Color.WHITE);
@@ -70,117 +71,112 @@ class DatabaseConnector {
         Connection connection = DriverManager.getConnection("jdbc:mysql://localhost:3306", "root", "root");
         ensureDatabaseExists(connection);
         connection.close();
-        return DriverManager.getConnection("jdbc:mysql://localhost:3306/parent", "root", "root");
+        return DriverManager.getConnection("jdbc:mysql://localhost:3306/VETMSDB", "root", "root");
     }
     public static void ensureDatabaseExists(Connection connection) throws SQLException {
         try (Statement stmt = connection.createStatement()) {
-            ResultSet rs = stmt.executeQuery("SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = 'parent'");
+            ResultSet rs = stmt.executeQuery("SHOW DATABASES WHERE Database = 'VETMSDB'");
             if (!rs.next()) {
-                stmt.executeUpdate("CREATE DATABASE parent");
+                stmt.executeUpdate("CREATE DATABASE VETMSDB");
             }
         }
     }
     public static void initializeDatabase() throws SQLException {
         try (Statement stmt = getConnection().createStatement()) {
-            stmt.execute("USE parent");
-            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS medicines (" +
-                    "  m_id INT PRIMARY KEY AUTO_INCREMENT," +
-                    "  m_name VARCHAR(100) NOT NULL," +
-                    "  m_type VARCHAR(100) NOT NULL," +
-                    "  is_deleted TINYINT(1) DEFAULT 0" +
-                    ")ENGINE=InnoDB");
-            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS medicinesInfo (" +
-                    "  m_id INT PRIMARY KEY," +
-                    "  m_size DECIMAL(10,2) NOT NULL," +
-                    "  m_full_size DECIMAL(10,2) NOT NULL," +
-                    "  m_buyPrice DECIMAL(10,2) NOT NULL," +
-                    "  m_sellPrice DECIMAL(10,2) NOT NULL," +
-                    "  m_expiryDate DATE NOT NULL," +
-                    "  m_amount INT NOT NULL," +
-                    "  m_seller VARCHAR(100)," +
-                    "  m_description TEXT," +
-                    "  is_deleted TINYINT(1) DEFAULT 0," +
-                    "  FOREIGN KEY (m_id) REFERENCES medicines(m_id) ON DELETE CASCADE" +
-                    ")ENGINE=InnoDB");
-            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS clients (" +
-                    "  client_id INT PRIMARY KEY AUTO_INCREMENT," +
-                    "  name VARCHAR(100) NOT NULL," +
-                    "  phone VARCHAR(20)," +
-                    "  clientDescription TEXT" +
-                    ")ENGINE=InnoDB");
-            stmt.executeUpdate("INSERT IGNORE INTO clients (client_id, name) VALUES(-1, '[UNKNOWN CLIENT]')");
-            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS transactions (" +
-                    "  transaction_id INT PRIMARY KEY AUTO_INCREMENT," +
-                    "  client_id INT NOT NULL," +
-                    "  m_id INT NOT NULL," +
-                    "  date TIMESTAMP NOT NULL," +
-                    "  q_sold DECIMAL(10,2) NOT NULL," +
-                    "  amount DECIMAL(10,2) NOT NULL," +
-                    "  type VARCHAR(512)," +
-                    "  description TEXT," +
-                    "  payer BOOLEAN NOT NULL," +
-                    "  is_deleted TINYINT(1) DEFAULT 0," +
-                    "  FOREIGN KEY (client_id) REFERENCES clients(client_id) ON DELETE CASCADE," +
-                    "  FOREIGN KEY (m_id) REFERENCES medicines(m_id)" +
-                    ")ENGINE=InnoDB");
-            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS appointments (" +
-                    "  id INT AUTO_INCREMENT PRIMARY KEY," +
-                    "  client_id INT," +
-                    "  date date NOT NULL," +
-                    "  is_done boolean NOT NULL," +
-                    "  is_deleted tinyint(1) DEFAULT 0," +
-                    "  description TEXT," +
-                    "  FOREIGN KEY (client_id) REFERENCES clients(client_id)" +
-                    ")ENGINE=InnoDB");
-            stmt.executeUpdate("CREATE PROCEDURE IF NOT EXISTS SellMedicinePartial(" +
-                    "    IN medicine_id INT," +
-                    "    IN sell_quantity DECIMAL(10,2)" +
-                    ")" +
-                    "BEGIN" +
-                    "    DECLARE current_size DECIMAL(10,2);" +
-                    "    DECLARE full_size DECIMAL(10,2);" +
-                    "    DECLARE current_amount INT;" +
-                    "    START TRANSACTION;" +
-                    "    SELECT m_size, m_full_size, m_amount " +
-                    "    INTO current_size, full_size, current_amount " +
-                    "    FROM medicinesInfo " +
-                    "    WHERE m_id = medicine_id " +
-                    "    FOR UPDATE;" +
-                    "    IF current_amount <= 0 THEN" +
-                    "        SIGNAL SQLSTATE '45000' " +
-                    "        SET MESSAGE_TEXT = 'Not enough stock';" +
-                    "    END IF;" +
-                    "    SET current_size = current_size - sell_quantity;" +
-                    "    IF current_size <= 0 THEN" +
-                    "        SET current_amount = current_amount - 1;" +
-                    "        SET current_size = full_size - ABS(current_size);" +
-                    "    END IF;" +
-                    "    IF current_amount < 0 THEN" +
-                    "        SIGNAL SQLSTATE '45000' " +
-                    "        SET MESSAGE_TEXT = 'Not enough stock';" +
-                    "    END IF;" +
-                    "    UPDATE medicinesInfo " +
-                    "    SET m_amount = current_amount," +
-                    "        m_size = CASE " +
-                    "            WHEN current_amount > 0 THEN current_size " +
-                    "            ELSE 0 " +
-                    "        END" +
-                    "    WHERE m_id = medicine_id;" +
-                    "    COMMIT;" +
-                    "END;");
+            stmt.execute("USE VETMSDB");
+            ResultSet rs = stmt.executeQuery("SHOW TABLES IN VETMSDB");
+            if (!rs.next()) {
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS medicines (" +
+                        "  m_id INT PRIMARY KEY AUTO_INCREMENT," +
+                        "  m_name VARCHAR(100) NOT NULL," +
+                        "  m_type VARCHAR(100) NOT NULL" +
+                        ")ENGINE=InnoDB");
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS medicinesInfo (" +
+                        "  m_id INT PRIMARY KEY," +
+                        "  m_size DECIMAL(10,2) NOT NULL," +
+                        "  m_full_size DECIMAL(10,2) NOT NULL," +
+                        "  m_buyPrice DECIMAL(10,2) NOT NULL," +
+                        "  m_sellPrice DECIMAL(10,2) NOT NULL," +
+                        "  m_expiryDate DATE NOT NULL," +
+                        "  m_amount INT NOT NULL," +
+                        "  m_seller VARCHAR(100)," +
+                        "  m_description TEXT," +
+                        "  is_deleted TINYINT(1) DEFAULT 0," +
+                        "  FOREIGN KEY (m_id) REFERENCES medicines(m_id) ON DELETE CASCADE" +
+                        ")ENGINE=InnoDB");
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS clients (" +
+                        "  client_id INT PRIMARY KEY AUTO_INCREMENT," +
+                        "  name VARCHAR(100) NOT NULL," +
+                        "  phone VARCHAR(20)," +
+                        "  clientDescription TEXT" +
+                        ")ENGINE=InnoDB");
+                stmt.executeUpdate("INSERT IGNORE INTO clients (client_id, name) VALUES(-1, '[UNKNOWN CLIENT]')");
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS transactions (" +
+                        "  transaction_id INT PRIMARY KEY AUTO_INCREMENT," +
+                        "  client_id INT NOT NULL," +
+                        "  m_id INT NOT NULL," +
+                        "  date TIMESTAMP NOT NULL," +
+                        "  q_sold DECIMAL(10,2) NOT NULL," +
+                        "  amount DECIMAL(10,2) NOT NULL," +
+                        "  type VARCHAR(512)," +
+                        "  description TEXT," +
+                        "  payer BOOLEAN NOT NULL," +
+                        "  is_deleted TINYINT(1) DEFAULT 0," +
+                        "  FOREIGN KEY (client_id) REFERENCES clients(client_id) ON DELETE CASCADE," +
+                        "  FOREIGN KEY (m_id) REFERENCES medicines(m_id)" +
+                        ")ENGINE=InnoDB");
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS appointments (" +
+                        "  id INT AUTO_INCREMENT PRIMARY KEY," +
+                        "  client_id INT," +
+                        "  date date NOT NULL," +
+                        "  is_done boolean NOT NULL," +
+                        "  is_deleted tinyint(1) DEFAULT 0," +
+                        "  description TEXT," +
+                        "  FOREIGN KEY (client_id) REFERENCES clients(client_id)" +
+                        ")ENGINE=InnoDB");
+                stmt.executeUpdate("CREATE PROCEDURE IF NOT EXISTS SellMedicinePartial(" +
+                        "    IN medicine_id INT," +
+                        "    IN sell_quantity DECIMAL(10,2)" +
+                        ")" +
+                        "BEGIN" +
+                        "    DECLARE current_size DECIMAL(10,2);" +
+                        "    DECLARE full_size DECIMAL(10,2);" +
+                        "    DECLARE current_amount INT;" +
+                        "    START TRANSACTION;" +
+                        "    SELECT m_size, m_full_size, m_amount " +
+                        "    INTO current_size, full_size, current_amount " +
+                        "    FROM medicinesInfo " +
+                        "    WHERE m_id = medicine_id " +
+                        "    FOR UPDATE;" +
+                        "    IF current_amount <= 0 THEN" +
+                        "        SIGNAL SQLSTATE '45000' " +
+                        "        SET MESSAGE_TEXT = 'Not enough stock';" +
+                        "    END IF;" +
+                        "    SET current_size = current_size - sell_quantity;" +
+                        "    IF current_size <= 0 THEN" +
+                        "        SET current_amount = current_amount - 1;" +
+                        "        SET current_size = full_size - ABS(current_size);" +
+                        "    END IF;" +
+                        "    IF current_amount < 0 THEN" +
+                        "        SIGNAL SQLSTATE '45000' " +
+                        "        SET MESSAGE_TEXT = 'Not enough stock';" +
+                        "    END IF;" +
+                        "    UPDATE medicinesInfo " +
+                        "    SET m_amount = current_amount," +
+                        "        m_size = CASE " +
+                        "            WHEN current_amount > 0 THEN current_size " +
+                        "            ELSE 0 " +
+                        "        END" +
+                        "    WHERE m_id = medicine_id;" +
+                        "    COMMIT;" +
+                        "END;");
+            }
         } catch (SQLException e) {
             throw new SQLException("Database initialization failed: " + e.getMessage());
         }
     }
 }
 class MainWindow extends JFrame {
-//    private final JPanel mainPanel = new JPanel();
-//    private final JToolBar buttons = new JToolBar();
-//    private final DailyUsagePanel dailyUsagePanel = new DailyUsagePanel();
-//    private final ClientPanel clientPanel = new ClientPanel();
-//    private final MedicinePanel medicinePanel = new MedicinePanel();
-//    private final AppointmentPanel appointmentPanel = new AppointmentPanel();
-//    private final SettingPanel settingPanel = new SettingPanel();
     public MainWindow() {
         initializeUI();
     }
@@ -189,16 +185,6 @@ class MainWindow extends JFrame {
         setExtendedState(JFrame.MAXIMIZED_BOTH);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-//        mainPanel.setLayout(new CardLayout());
-//        buttons.setLayout(new GridLayout(0, 5));
-//        buttons.setFloatable(false);
-//        addButton(buttons, "Daily Usage", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/home.png"))), _ -> showPanel("DAILYUSAGE"));
-//        addButton(buttons, "Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))), _ -> showPanel("CLIENTS"));
-//        addButton(buttons, "Medicine Stock", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/medicine.png"))), _ -> showPanel("MEDICINES"));
-//        addButton(buttons, "Appointments", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/calendar.png"))), _ -> showPanel("APPOINTMENTS"));
-//        addButton(buttons, "Settings", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/reglage.png"))), _ -> showPanel("SETTINGS"));
-//        add(buttons, BorderLayout.NORTH);
-//        add(mainPanel, BorderLayout.CENTER);
         JTabbedPane tabbedPane = new JTabbedPane(SwingConstants.TOP);
         tabbedPane.insertTab("Daily Usage", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/home.png"))), new DailyUsagePanel(), "Adding daily transaction here.", 0);
         tabbedPane.insertTab("Client List", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/client.png"))), new ClientPanel(), "Adding, editing and deleting client list here.", 1);
@@ -207,49 +193,9 @@ class MainWindow extends JFrame {
         tabbedPane.insertTab("Settings", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/reglage.png"))), new SettingPanel(), "Change the settings about this program.", 4);
         add(tabbedPane, BorderLayout.CENTER);
     }
-//    private void showPanel(String panelName) {
-//        switch (panelName) {
-//            case "DAILYUSAGE" -> {
-//                mainPanel.removeAll();
-//                mainPanel.add(dailyUsagePanel, "DAILYUSAGE");
-//                dailyUsagePanel.refreshData();
-//            }
-//            case "CLIENTS" -> {
-//                mainPanel.removeAll();
-//                mainPanel.add(clientPanel, "CLIENTS");
-//                clientPanel.refreshData();
-//            }
-//            case "MEDICINES" -> {
-//                mainPanel.removeAll();
-//                mainPanel.add(medicinePanel, "MEDICINES");
-//                medicinePanel.refreshData();
-//            }
-//            case "APPOINTMENTS" -> {
-//                mainPanel.removeAll();
-//                mainPanel.add(appointmentPanel, "APPOINTMENTS");
-//                appointmentPanel.refreshData();
-//            }
-//            case "SETTINGS" -> {
-//                mainPanel.removeAll();
-//                mainPanel.add(settingPanel, "SETTINGS");
-//            }
-//        }
-//        mainPanel.revalidate();
-//        mainPanel.repaint();
-//    }
-//    private void addButton(JToolBar bar, String text, ImageIcon icon, ActionListener action) {
-//        JButton btn = new JButton(text);
-//        btn.addActionListener(action);
-//        btn.setIcon(icon);
-//        btn.setIconTextGap(15);
-//        btn.setFont(new Font("DejaVu Bold", Font.PLAIN, 18));
-//        btn.setPreferredSize(new Dimension(140,50));
-//        bar.add(btn);
-//    }
 }
 class DailyUsagePanel extends JPanel {
     private final JComboBox<Client> clientCombo = new JComboBox<>();
-//    private final JSearchableComboBox medicineCombo = new JSearchableComboBox();
     private final JComboBox<Medicine> medicineCombo = new JComboBox<>();
     private final JSpinner quantitySpinner = new JSpinner(new SpinnerNumberModel(0.0, 0, 10000000, 1));
     private final JSpinner amountSpinner = new JSpinner(new SpinnerNumberModel(0.0, 0, 10000000, 100));
@@ -261,8 +207,6 @@ class DailyUsagePanel extends JPanel {
     private DefaultTableModel todayModel;
     private JTable historyTable;
     private DefaultTableModel historyModel;
-//    JTextField medicineName = (JTextField) medicineCombo.getEditor().getEditorComponent();
-
     public DailyUsagePanel() {
         initializeUI();
         refreshData();
@@ -911,6 +855,12 @@ class MedicinePanel extends JPanel {
     private DefaultTableModel tableModel;
     private JLabel statusLabel;
     private JTextField searchField;
+    private JPanel infoPanel;
+    private final JLabel TMSP = new JLabel();
+    private final JLabel TMBP = new JLabel();
+    private final JLabel TSP = new JLabel();
+    private final JLabel TBP = new JLabel();
+    private final JLabel TS = new JLabel();
     public MedicinePanel() {
         initializeUI();
         loadData();
@@ -938,6 +888,19 @@ class MedicinePanel extends JPanel {
         dataTable.removeColumn(dataTable.getColumnModel().getColumn(0));
         dataTable.setRowMargin(1);
         dataTable.setShowHorizontalLines(true);
+        infoPanel = new JPanel();
+        infoPanel.setBorder(new TitledBorder(new EmptyBorder(5,5,5,5),"Info Area"));
+        infoPanel.setLayout(new GridLayout(5,0,5,5));
+        infoPanel.add(new JLabel("Total Medicine Selling Price : "));
+        infoPanel.add(TMSP);
+        infoPanel.add(new JLabel("Total Medicine Buying Price : "));
+        infoPanel.add(TMBP);
+        infoPanel.add(new JLabel("Total Selling Price : "));
+        infoPanel.add(TSP);
+        infoPanel.add(new JLabel("Total Buying Price : "));
+        infoPanel.add(TBP);
+        infoPanel.add(new JLabel("Total Stock : "));
+        infoPanel.add(TS);
         JScrollPane scrollPane = new JScrollPane(dataTable);
         JToolBar toolBar = new JToolBar();
         toolBar.setFloatable(false);
@@ -972,6 +935,7 @@ class MedicinePanel extends JPanel {
         statusLabel.setFont(new Font("DejaVu",Font.PLAIN,18));
         add(toolBar, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
+        add(infoPanel, BorderLayout.WEST);
         add(statusLabel, BorderLayout.SOUTH);
         revalidate();
         repaint();
@@ -1017,6 +981,28 @@ class MedicinePanel extends JPanel {
             showError("Search or Load failed: " + ex.getMessage());
         }
     }
+    private void updateInfoPanel() {
+        double totalSellingPrice = 0;
+        double totalBuyingPrice = 0;
+        double totalMedicineSellingPrice = 0;
+        double totalMedicineBuyingPrice = 0;
+        int totalStock = 0;
+        for (int i = 0; i < tableModel.getRowCount(); i++) {
+            double sellPrice = (double) tableModel.getValueAt(i, 4);
+            double buyPrice = (double) tableModel.getValueAt(i, 5);
+            int amount = (int) tableModel.getValueAt(i, 7);
+            totalSellingPrice += sellPrice * amount;
+            totalBuyingPrice += buyPrice * amount;
+            totalMedicineSellingPrice += sellPrice;
+            totalMedicineBuyingPrice += buyPrice;
+            totalStock += amount;
+        }
+        TMSP.setText(String.format("%.2f DA", totalMedicineSellingPrice));
+        TMBP.setText(String.format("%.2f DA", totalMedicineBuyingPrice));
+        TSP.setText(String.format("%.2f DA", totalSellingPrice));
+        TBP.setText(String.format("%.2f DA", totalBuyingPrice));
+        TS.setText(String.valueOf(totalStock));
+    }
     private void showAddDialog(ActionEvent e) {
         new MedicineDialog(null, "Add Medicine", -1).setVisible(true);
         refreshData();
@@ -1052,6 +1038,7 @@ class MedicinePanel extends JPanel {
     }
     public void refreshData() {
         loadData();
+        updateInfoPanel();
         statusLabel.setText("Loaded " + tableModel.getRowCount() + " medicines");
     }
     private void showError(String message) {
