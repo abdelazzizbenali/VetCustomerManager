@@ -979,7 +979,23 @@ class MedicinePanel extends JPanel {
         }
     }
     private void updateInfoPanel() {
+        new SwingWorker<ResultSet, Void>() {
+            @Override
+            protected ResultSet doInBackground() throws Exception {
+                return MedicineDAO.getMedicineInfo();
+            }
+            @Override
+            protected void done() {
+                try {
+                    ResultSet results = get();
+                    SwingUtilities.invokeLater(() -> {
 
+                    });
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(null, ex.getMessage(), "Loading Medicine Info Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
     }
     private void showAddDialog(ActionEvent e) {
         new MedicineDialog(null, "Add Medicine", -1).setVisible(true);
@@ -1161,8 +1177,7 @@ class MedicineDAO {
     }
     public static void updateMedicineInfo(int m_id, double size, double fullSize, double buyPrice, double sellPrice, LocalDate expiryDate, int amount) throws SQLException {
         String sql = "UPDATE medicinesInfo SET m_size = ?, m_full_size = ?, m_buyPrice = ?, m_sellPrice = ?, m_expiryDate = ?, m_amount = ? WHERE m_id = ?";
-        try (Connection conn = DatabaseConnector.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
+        try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement(sql)) {
             stmt.setDouble(1, size);
             stmt.setDouble(2, fullSize);
             stmt.setDouble(3, buyPrice);
@@ -1207,10 +1222,8 @@ class MedicineDAO {
         String sql = "SELECT m.*, mi.* FROM medicines m JOIN medicinesInfo mi ON m.m_id = mi.m_id WHERE m.m_name LIKE '%"+searchTerm+"%'";
         return DatabaseConnector.getConnection().prepareStatement(sql).executeQuery(sql);
     }
-    public static
     public static void sellPartialMedicine(int medicineId, double quantity) throws SQLException {
-        try (Connection conn = DatabaseConnector.getConnection();
-             CallableStatement stmt = conn.prepareCall("{call SellMedicinePartial(?, ?)}")) {
+        try (CallableStatement stmt = DatabaseConnector.getConnection().prepareCall("{call SellMedicinePartial(?, ?)}")) {
             stmt.setInt(1, medicineId);
             stmt.setDouble(2, quantity);
             stmt.execute();
@@ -1220,6 +1233,18 @@ class MedicineDAO {
             }
             throw new SQLException("Database Error: " + e.getMessage());
         }
+    }
+    public static ResultSet getMedicineInfo(int id) {
+        ResultSet rs = null;
+        ResultSet rs2 = null;
+        try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("SELECT m_sellPrice*m_amount AS TMSP, m_buyPrice*m_amount AS TMBP FROM medicinesInfo WHERE m_id = ?")) {
+            stmt.setInt(1, id);
+            rs = stmt.executeQuery();
+            rs2 = DatabaseConnector.getConnection().createStatement().executeQuery("SELECT SUM(m_sellPrice*m_amount) AS TSP, SUM(m_buyPrice*m_amount) AS TBP, SUM(m_amount) AS TS FROM medicinesInfo");
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(null, e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+        }
+        return rs + rs2;
     }
 }
 class ClientDAO {
