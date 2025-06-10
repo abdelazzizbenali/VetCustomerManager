@@ -890,6 +890,11 @@ class MedicinePanel extends JPanel {
         });
         dataTable.removeColumn(dataTable.getColumnModel().getColumn(0));
         JPanel infoPanel = new JPanel();
+        TMSP.setFont(new Font("DejVu", Font.BOLD, 26));
+        TMBP.setFont(new Font("DejVu", Font.BOLD, 26));
+        TSP.setFont(new Font("DejVu", Font.BOLD, 26));
+        TBP.setFont(new Font("DejVu", Font.BOLD, 26));
+        TS.setFont(new Font("DejVu", Font.BOLD, 26));
         infoPanel.setBorder(new TitledBorder(new EmptyBorder(1,1,1,1),"Info Area"));
         infoPanel.setLayout(new GridLayout(10,0,1,1));
         infoPanel.add(new JLabel("Total Medicine Selling Price : "));
@@ -972,26 +977,44 @@ class MedicinePanel extends JPanel {
         }
     }
     private void updateInfoPanel(int id) {
-        try {
-            if (id == -1) {
-                TMSP.setText("0.00 DA");
-                TMBP.setText("0.00 DA");
-                TSP.setText("0.00 DA");
-                TBP.setText("0.00 DA");
-                TS.setText("0");
-            } else {
-                if (Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).next()) {
-                    TMSP.setText(String.valueOf(Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).getInt("TMSP")));
-                    TMBP.setText(String.valueOf(Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).getInt("TMBP")));
-                    TSP.setText(String.valueOf(Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).getInt("TSP")));
-                    TBP.setText(String.valueOf(Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).getInt("TBP")));
-                    TS.setText(String.valueOf(Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).getInt("TS")));
-                }
-            }
-        } catch (SQLException e ) {
-            showError("Error loading medicine info: " + e.getMessage());
-//            e.printStackTrace();
+        if (id == -1) {
+            resetFieldsToZero();
+            return;
         }
+        ResultSet rs = null;
+        try {
+            rs = MedicineDAO.getMedicineInfo(id);
+            if (rs.next()) {
+                double tmsp = rs.getDouble("TMSP");
+                double tmbp = rs.getDouble("TMBP");
+                double tsp = rs.getDouble("TSP");
+                double tbp = rs.getDouble("TBP");
+                int ts = rs.getInt("TS");
+                TMSP.setText(String.format("%.2f DA", tmsp));
+                TMBP.setText(String.format("%.2f DA", tmbp));
+                TSP.setText(String.format("%.2f DA", tsp));
+                TBP.setText(String.format("%.2f DA", tbp));
+                TS.setText(String.valueOf(ts));
+            } else {
+                resetFieldsToZero();
+            }
+        } catch (SQLException e) {
+            showError("Error loading medicine info: " + e.getMessage());
+            resetFieldsToZero();
+        } finally {
+            try {
+                if (rs != null) rs.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    private void resetFieldsToZero() {
+        TMSP.setText("0.00 DA");
+        TMBP.setText("0.00 DA");
+        TSP.setText("0.00 DA");
+        TBP.setText("0.00 DA");
+        TS.setText("0");
     }
     private void showAddDialog(ActionEvent e) {
         new MedicineDialog(null, "Add Medicine", -1).setVisible(true);
@@ -1028,6 +1051,7 @@ class MedicinePanel extends JPanel {
     }
     public void refreshData() {
         loadData();
+        updateInfoPanel(-1);
         statusLabel.setText("Loaded " + tableModel.getRowCount() + " medicines");
     }
     private void showError(String message) {
@@ -1230,8 +1254,17 @@ class MedicineDAO {
         }
     }
     public static ResultSet getMedicineInfo(int id) throws SQLException {
-        String sql = "SELECT COALESCE(SUM(IF(m_id = 58 AND is_deleted = 0, m_sellPrice * m_amount, 0)), 0) AS TMSP, COALESCE(SUM(IF(m_id = 58 AND is_deleted = 0, m_buyPrice * m_amount, 0)), 0) AS TMBP, COALESCE(SUM(m_sellPrice * m_amount), 0) AS TSP, COALESCE(SUM(m_buyPrice * m_amount), 0) AS TBP, COALESCE(SUM(m_amount), 0) AS TS FROM medicinesInfo;";
-        return DatabaseConnector.getConnection().prepareStatement(sql).executeQuery();
+        String sql = "SELECT " +
+                "COALESCE(SUM(IF(m_id = ? AND is_deleted = 0, m_sellPrice * m_amount, 0)), 0) AS TMSP, " +
+                "COALESCE(SUM(IF(m_id = ? AND is_deleted = 0, m_buyPrice * m_amount, 0)), 0) AS TMBP, " +
+                "COALESCE(SUM(m_sellPrice * m_amount), 0) AS TSP, " +
+                "COALESCE(SUM(m_buyPrice * m_amount), 0) AS TBP, " +
+                "COALESCE(SUM(m_amount), 0) AS TS " +
+                "FROM medicinesInfo";
+        PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement(sql);
+        stmt.setInt(1, id);
+        stmt.setInt(2, id);
+        return stmt.executeQuery();
     }
 }
 class ClientDAO {
