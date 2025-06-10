@@ -515,7 +515,6 @@ class DailyUsagePanel extends JPanel {
 class DailyTransactionsPanel extends JPanel {
     private final LocalDate date;
     private DefaultTableModel model;
-    private JTable table;
     private JLabel statusLabel;
     public DailyTransactionsPanel(LocalDate date) {
         this.date = date;
@@ -526,7 +525,7 @@ class DailyTransactionsPanel extends JPanel {
         setLayout(new BorderLayout());
         setSize(600, 500);
         model = new DefaultTableModel(new String[]{"Time", "Client", "Medicine", "Quantity", "Amount", "Type", "Description", "Payed"}, 0);
-        table = new JTable(model);
+        JTable table = new JTable(model);
         statusLabel = new JLabel();
         statusLabel.setBorder(new EmptyBorder(10, 15, 10, 15));
         statusLabel.setBackground(new Color(0, 0, 0));
@@ -855,11 +854,11 @@ class MedicinePanel extends JPanel {
     private DefaultTableModel tableModel;
     private JLabel statusLabel;
     private JTextField searchField;
-    private final JLabel TMSP = new JLabel();
-    private final JLabel TMBP = new JLabel();
-    private final JLabel TSP = new JLabel();
-    private final JLabel TBP = new JLabel();
-    private final JLabel TS = new JLabel();
+    private JLabel TMSP = new JLabel("0.00 DA");
+    private JLabel TMBP = new JLabel("0.00 DA");
+    private JLabel TSP = new JLabel("0.00 DA");
+    private JLabel TBP = new JLabel("0.00 DA");
+    private JLabel TS = new JLabel("0");
     public MedicinePanel() {
         initializeUI();
         loadData();
@@ -884,12 +883,19 @@ class MedicinePanel extends JPanel {
         searchField = new JTextField(20);
         dataTable = new JTable(tableModel);
         dataTable.setAutoCreateRowSorter(true);
-        dataTable.removeColumn(dataTable.getColumnModel().getColumn(0));
         dataTable.setRowMargin(1);
         dataTable.setShowHorizontalLines(true);
+        dataTable.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 1) {
+                    updateInfoPanel((int) tableModel.getValueAt(dataTable.convertRowIndexToModel(dataTable.rowAtPoint(e.getPoint())), 0));
+                }
+            }
+        });
+        dataTable.removeColumn(dataTable.getColumnModel().getColumn(0));
         JPanel infoPanel = new JPanel();
         infoPanel.setBorder(new TitledBorder(new EmptyBorder(5,5,5,5),"Info Area"));
-        infoPanel.setLayout(new GridLayout(5,0,5,5));
+        infoPanel.setLayout(new GridLayout(10,0,5,5));
         infoPanel.add(new JLabel("Total Medicine Selling Price : "));
         infoPanel.add(TMSP);
         infoPanel.add(new JLabel("Total Medicine Buying Price : "));
@@ -905,18 +911,9 @@ class MedicinePanel extends JPanel {
         toolBar.setFloatable(false);
         searchField.addActionListener(_ -> refreshData());
         searchField.getDocument().addDocumentListener(new DocumentListener() {
-            @Override
-            public void insertUpdate(DocumentEvent e) {
-                refreshData();
-            }
-            @Override
-            public void removeUpdate(DocumentEvent e) {
-                refreshData();
-            }
-            @Override
-            public void changedUpdate(DocumentEvent e) {
-                refreshData();
-            }
+            @Override public void insertUpdate(DocumentEvent e) { refreshData(); }
+            @Override public void removeUpdate(DocumentEvent e) { refreshData(); }
+            @Override public void changedUpdate(DocumentEvent e) { refreshData(); }
         });
         addButton(toolBar, "Add", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/add.png"))), "Add new medicine", this::showAddDialog, KeyEvent.VK_ADD);
         addButton(toolBar, "Edit", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/edit.png"))), "Edit selected", this::showEditDialog, KeyEvent.VK_E);
@@ -978,24 +975,28 @@ class MedicinePanel extends JPanel {
             showError("Search or Load failed: " + ex.getMessage());
         }
     }
-    private void updateInfoPanel() {
-        new SwingWorker<ResultSet, Void>() {
-            @Override
-            protected ResultSet doInBackground() throws Exception {
-                return MedicineDAO.getMedicineInfo();
-            }
-            @Override
-            protected void done() {
-                try {
-                    ResultSet results = get();
-                    SwingUtilities.invokeLater(() -> {
-
-                    });
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(null, ex.getMessage(), "Loading Medicine Info Error", JOptionPane.ERROR_MESSAGE);
+    private void updateInfoPanel(int id) {
+        if (id == -1) {
+            TMSP.setText("0.00 DA");
+            TMBP.setText("0.00 DA");
+            TSP.setText("0.00 DA");
+            TBP.setText("0.00 DA");
+            TS.setText("0");
+        } else {
+            try {
+                ResultSet rs = MedicineDAO.getMedicineInfo(id);
+                assert rs != null;
+                if (rs.next()) {
+                    TMSP.setText(String.format("%.2f DA", rs.getDouble("m_sellPrice") * rs.getInt("m_amount")));
+                    TMBP.setText(String.format("%.2f DA", rs.getDouble("m_buyPrice") * rs.getInt("m_amount")));
+                    TSP.setText(String.format("%.2f DA", rs.getDouble("m_sellPrice") * rs.getInt("m_amount")));
+                    TBP.setText(String.format("%.2f DA", rs.getDouble("m_buyPrice") * rs.getInt("m_amount")));
+                    TS.setText(String.valueOf(rs.getInt("m_amount")));
                 }
+            } catch (SQLException e ) {
+                showError("Error loading medicine info: " + e.getMessage());
             }
-        }.execute();
+        }
     }
     private void showAddDialog(ActionEvent e) {
         new MedicineDialog(null, "Add Medicine", -1).setVisible(true);
@@ -1032,7 +1033,6 @@ class MedicinePanel extends JPanel {
     }
     public void refreshData() {
         loadData();
-        updateInfoPanel();
         statusLabel.setText("Loaded " + tableModel.getRowCount() + " medicines");
     }
     private void showError(String message) {
@@ -1235,16 +1235,14 @@ class MedicineDAO {
         }
     }
     public static ResultSet getMedicineInfo(int id) {
-        ResultSet rs = null;
-        ResultSet rs2 = null;
-        try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("SELECT m_sellPrice*m_amount AS TMSP, m_buyPrice*m_amount AS TMBP FROM medicinesInfo WHERE m_id = ?")) {
+        try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("SELECT SUM(CASE WHEN m_id = ? THEN m_sellPrice * m_amount ELSE 0 END) AS TMSP, SUM(CASE WHEN m_id = ? THEN m_buyPrice * m_amount ELSE 0 END) AS TMBP, SUM(m_sellPrice * m_amount) AS TSP, SUM(m_buyPrice * m_amount) AS TBP, SUM(m_amount) AS TS FROM medicinesInfo")) {
             stmt.setInt(1, id);
-            rs = stmt.executeQuery();
-            rs2 = DatabaseConnector.getConnection().createStatement().executeQuery("SELECT SUM(m_sellPrice*m_amount) AS TSP, SUM(m_buyPrice*m_amount) AS TBP, SUM(m_amount) AS TS FROM medicinesInfo");
+            stmt.setInt(2, id);
+            return stmt.executeQuery();
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(null, e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
         }
-        return rs + rs2;
+        return null;
     }
 }
 class ClientDAO {
