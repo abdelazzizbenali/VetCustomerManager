@@ -867,12 +867,8 @@ class MedicinePanel extends JPanel {
         setLayout(new BorderLayout());
         String[] columnNames = {"ID", "Medicine Name", "Size(ml)", "Type", "Buy Price(DA)", "Sell Price(DA)", "Expiry Date", "Stock"};
         tableModel = new DefaultTableModel(columnNames, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return false;
-            }
-            @Override
-            public Class<?> getColumnClass(int columnIndex) {
+            @Override public boolean isCellEditable(int row, int column) { return false; }
+            @Override public Class<?> getColumnClass(int columnIndex) {
                 return switch (columnIndex) {
                     case 0, 7 -> Integer.class;
                     case 2, 4, 5 -> Double.class;
@@ -888,14 +884,14 @@ class MedicinePanel extends JPanel {
         dataTable.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() == 1) {
-                    updateInfoPanel((int) tableModel.getValueAt(dataTable.convertRowIndexToModel(dataTable.rowAtPoint(e.getPoint())), 0));
+                    updateInfoPanel((int) tableModel.getValueAt(dataTable.getSelectedRow(), 0));
                 }
             }
         });
         dataTable.removeColumn(dataTable.getColumnModel().getColumn(0));
         JPanel infoPanel = new JPanel();
-        infoPanel.setBorder(new TitledBorder(new EmptyBorder(5,5,5,5),"Info Area"));
-        infoPanel.setLayout(new GridLayout(10,0,5,5));
+        infoPanel.setBorder(new TitledBorder(new EmptyBorder(1,1,1,1),"Info Area"));
+        infoPanel.setLayout(new GridLayout(10,0,1,1));
         infoPanel.add(new JLabel("Total Medicine Selling Price : "));
         infoPanel.add(TMSP);
         infoPanel.add(new JLabel("Total Medicine Buying Price : "));
@@ -984,14 +980,12 @@ class MedicinePanel extends JPanel {
             TS.setText("0");
         } else {
             try {
-                ResultSet rs = MedicineDAO.getMedicineInfo(id);
-                assert rs != null;
-                if (rs.next()) {
-                    TMSP.setText(String.format("%.2f DA", rs.getDouble("m_sellPrice") * rs.getInt("m_amount")));
-                    TMBP.setText(String.format("%.2f DA", rs.getDouble("m_buyPrice") * rs.getInt("m_amount")));
-                    TSP.setText(String.format("%.2f DA", rs.getDouble("m_sellPrice") * rs.getInt("m_amount")));
-                    TBP.setText(String.format("%.2f DA", rs.getDouble("m_buyPrice") * rs.getInt("m_amount")));
-                    TS.setText(String.valueOf(rs.getInt("m_amount")));
+                if (Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).next()) {
+                    TMSP.setText(String.valueOf(Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).getInt("TMSP")));
+                    TMBP.setText(String.valueOf(Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).getInt("TMBP")));
+                    TSP.setText(String.valueOf(Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).getInt("TSP")));
+                    TBP.setText(String.valueOf(Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).getInt("TBP")));
+                    TS.setText(String.valueOf(Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).getInt("TS")));
                 }
             } catch (SQLException e ) {
                 showError("Error loading medicine info: " + e.getMessage());
@@ -1234,15 +1228,8 @@ class MedicineDAO {
             throw new SQLException("Database Error: " + e.getMessage());
         }
     }
-    public static ResultSet getMedicineInfo(int id) {
-        try (PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement("SELECT SUM(CASE WHEN m_id = ? THEN m_sellPrice * m_amount ELSE 0 END) AS TMSP, SUM(CASE WHEN m_id = ? THEN m_buyPrice * m_amount ELSE 0 END) AS TMBP, SUM(m_sellPrice * m_amount) AS TSP, SUM(m_buyPrice * m_amount) AS TBP, SUM(m_amount) AS TS FROM medicinesInfo")) {
-            stmt.setInt(1, id);
-            stmt.setInt(2, id);
-            return stmt.executeQuery();
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(null, e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
-        }
-        return null;
+    public static ResultSet getMedicineInfo(int id) throws SQLException {
+        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT SUM(CASE WHEN m_id = " + id + " THEN m_sellPrice * m_amount ELSE 0 END) AS TMSP, SUM(CASE WHEN m_id = " + id + " THEN m_buyPrice * m_amount ELSE 0 END) AS TMBP, SUM(m_sellPrice * m_amount) AS TSP, SUM(m_buyPrice * m_amount) AS TBP, SUM(m_amount) AS TS FROM medicinesInfo");
     }
 }
 class ClientDAO {
