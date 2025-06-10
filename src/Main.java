@@ -972,14 +972,14 @@ class MedicinePanel extends JPanel {
         }
     }
     private void updateInfoPanel(int id) {
-        if (id == -1) {
-            TMSP.setText("0.00 DA");
-            TMBP.setText("0.00 DA");
-            TSP.setText("0.00 DA");
-            TBP.setText("0.00 DA");
-            TS.setText("0");
-        } else {
-            try {
+        try {
+            if (id == -1) {
+                TMSP.setText("0.00 DA");
+                TMBP.setText("0.00 DA");
+                TSP.setText("0.00 DA");
+                TBP.setText("0.00 DA");
+                TS.setText("0");
+            } else {
                 if (Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).next()) {
                     TMSP.setText(String.valueOf(Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).getInt("TMSP")));
                     TMBP.setText(String.valueOf(Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).getInt("TMBP")));
@@ -987,9 +987,10 @@ class MedicinePanel extends JPanel {
                     TBP.setText(String.valueOf(Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).getInt("TBP")));
                     TS.setText(String.valueOf(Objects.requireNonNull(MedicineDAO.getMedicineInfo(id)).getInt("TS")));
                 }
-            } catch (SQLException e ) {
-                showError("Error loading medicine info: " + e.getMessage());
             }
+        } catch (SQLException e ) {
+            showError("Error loading medicine info: " + e.getMessage());
+//            e.printStackTrace();
         }
     }
     private void showAddDialog(ActionEvent e) {
@@ -1229,7 +1230,8 @@ class MedicineDAO {
         }
     }
     public static ResultSet getMedicineInfo(int id) throws SQLException {
-        return DatabaseConnector.getConnection().createStatement().executeQuery("SELECT SUM(CASE WHEN m_id = " + id + " THEN m_sellPrice * m_amount ELSE 0 END) AS TMSP, SUM(CASE WHEN m_id = " + id + " THEN m_buyPrice * m_amount ELSE 0 END) AS TMBP, SUM(m_sellPrice * m_amount) AS TSP, SUM(m_buyPrice * m_amount) AS TBP, SUM(m_amount) AS TS FROM medicinesInfo");
+        String sql = "SELECT COALESCE(SUM(IF(m_id = 58 AND is_deleted = 0, m_sellPrice * m_amount, 0)), 0) AS TMSP, COALESCE(SUM(IF(m_id = 58 AND is_deleted = 0, m_buyPrice * m_amount, 0)), 0) AS TMBP, COALESCE(SUM(m_sellPrice * m_amount), 0) AS TSP, COALESCE(SUM(m_buyPrice * m_amount), 0) AS TBP, COALESCE(SUM(m_amount), 0) AS TS FROM medicinesInfo;";
+        return DatabaseConnector.getConnection().prepareStatement(sql).executeQuery();
     }
 }
 class ClientDAO {
