@@ -888,6 +888,14 @@ class MedicinePanel extends JPanel {
                 }
             }
         });
+        dataTable.addKeyListener(new KeyAdapter() {
+            @Override public void keyPressed(KeyEvent e) {
+                super.keyPressed(e);
+                if (e.getKeyCode() == KeyEvent.VK_UP || e.getKeyCode() == KeyEvent.VK_DOWN) {
+                    updateInfoPanel((int) tableModel.getValueAt(dataTable.getSelectedRow(), 0));
+                }
+            }
+        });
         dataTable.removeColumn(dataTable.getColumnModel().getColumn(0));
         JPanel infoPanel = new JPanel();
         TMSP.setFont(new Font("DejVu", Font.BOLD, 26));
@@ -895,17 +903,27 @@ class MedicinePanel extends JPanel {
         TSP.setFont(new Font("DejVu", Font.BOLD, 26));
         TBP.setFont(new Font("DejVu", Font.BOLD, 26));
         TS.setFont(new Font("DejVu", Font.BOLD, 26));
+        JLabel TMSPLabel = new JLabel("Total Medicine Selling Price : ");
+        TMSPLabel.setFont(new Font("DejVu", Font.BOLD, 18));
+        JLabel TMBPLabel = new JLabel("Total Medicine Buying Price : ");
+        TMBPLabel.setFont(new Font("DejVu", Font.BOLD, 18));
+        JLabel TSPLabel = new JLabel("Total Selling Price : ");
+        TSPLabel.setFont(new Font("DejVu", Font.BOLD, 18));
+        JLabel TBPLabel = new JLabel("Total Buying Price : ");
+        TBPLabel.setFont(new Font("DejVu", Font.BOLD, 18));
+        JLabel TSLabel = new JLabel("Total Stock : ");
+        TSLabel.setFont(new Font("DejVu", Font.BOLD, 18));
         infoPanel.setBorder(new TitledBorder(new EmptyBorder(1,1,1,1),"Info Area"));
         infoPanel.setLayout(new GridLayout(10,0,1,1));
-        infoPanel.add(new JLabel("Total Medicine Selling Price : "));
+        infoPanel.add(TMSPLabel);
         infoPanel.add(TMSP);
-        infoPanel.add(new JLabel("Total Medicine Buying Price : "));
+        infoPanel.add(TMBPLabel);
         infoPanel.add(TMBP);
-        infoPanel.add(new JLabel("Total Selling Price : "));
+        infoPanel.add(TSPLabel);
         infoPanel.add(TSP);
-        infoPanel.add(new JLabel("Total Buying Price : "));
+        infoPanel.add(TBPLabel);
         infoPanel.add(TBP);
-        infoPanel.add(new JLabel("Total Stock : "));
+        infoPanel.add(TSLabel);
         infoPanel.add(TS);
         JScrollPane scrollPane = new JScrollPane(dataTable);
         JToolBar toolBar = new JToolBar();
@@ -930,7 +948,7 @@ class MedicinePanel extends JPanel {
         statusLabel.setFont(new Font("DejaVu",Font.PLAIN,18));
         add(toolBar, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
-        add(infoPanel, BorderLayout.WEST);
+        add(infoPanel, BorderLayout.EAST);
         add(statusLabel, BorderLayout.SOUTH);
         revalidate();
         repaint();
@@ -1238,7 +1256,7 @@ class MedicineDAO {
         return null;
     }
     public static ResultSet searchMedicinesByName(String searchTerm) throws SQLException {
-        String sql = "SELECT m.*, mi.* FROM medicines m JOIN medicinesInfo mi ON m.m_id = mi.m_id WHERE m.m_name LIKE '%"+searchTerm+"%'";
+        String sql = "SELECT m.*, mi.* FROM medicines m JOIN medicinesInfo mi ON m.m_id = mi.m_id WHERE m.m_name LIKE '%"+searchTerm+"%' AND is_deleted = 0";
         return DatabaseConnector.getConnection().prepareStatement(sql).executeQuery(sql);
     }
     public static void sellPartialMedicine(int medicineId, double quantity) throws SQLException {
@@ -1257,9 +1275,9 @@ class MedicineDAO {
         String sql = "SELECT " +
                 "COALESCE(SUM(IF(m_id = ? AND is_deleted = 0, m_sellPrice * m_amount, 0)), 0) AS TMSP, " +
                 "COALESCE(SUM(IF(m_id = ? AND is_deleted = 0, m_buyPrice * m_amount, 0)), 0) AS TMBP, " +
-                "COALESCE(SUM(m_sellPrice * m_amount), 0) AS TSP, " +
-                "COALESCE(SUM(m_buyPrice * m_amount), 0) AS TBP, " +
-                "COALESCE(SUM(m_amount), 0) AS TS " +
+                "COALESCE(SUM(IF(is_deleted = 0, m_sellPrice * m_amount, 0)), 0) AS TSP, " +
+                "COALESCE(SUM(IF(is_deleted = 0, m_buyPrice * m_amount, 0)), 0) AS TBP, " +
+                "COALESCE(SUM(IF(is_deleted = 0, m_amount, 0)), 0) AS TS " +
                 "FROM medicinesInfo";
         PreparedStatement stmt = DatabaseConnector.getConnection().prepareStatement(sql);
         stmt.setInt(1, id);
