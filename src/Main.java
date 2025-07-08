@@ -71,19 +71,19 @@ class DatabaseConnector {
         Connection connection = DriverManager.getConnection("jdbc:mysql://localhost:3306", "root", "root");
         ensureDatabaseExists(connection);
         connection.close();
-        return DriverManager.getConnection("jdbc:mysql://localhost:3306/parent", "root", "root");
+        return DriverManager.getConnection("jdbc:mysql://localhost:3306/VETMSDB", "root", "root");
     }
     public static void ensureDatabaseExists(Connection connection) throws SQLException {
         try (Statement stmt = connection.createStatement()) {
-            ResultSet rs = stmt.executeQuery("SHOW DATABASES WHERE Database = 'parent'");
+            ResultSet rs = stmt.executeQuery("SHOW DATABASES WHERE Database = 'VETMSDB'");
             if (!rs.next()) {
-                stmt.executeUpdate("CREATE DATABASE parent");
+                stmt.executeUpdate("CREATE DATABASE VETMSDB");
             }
         }
     }
     public static void initializeDatabase() throws SQLException {
         try (Statement stmt = getConnection().createStatement()) {
-            stmt.execute("USE parent");
+            stmt.execute("USE VETMSDB");
             ResultSet rs = stmt.executeQuery("SHOW TABLES IN VETMSDB");
             if (!rs.next()) {
                 stmt.executeUpdate("CREATE TABLE IF NOT EXISTS medicines (" +
@@ -854,11 +854,11 @@ class MedicinePanel extends JPanel {
     private DefaultTableModel tableModel;
     private JLabel statusLabel;
     private JTextField searchField;
-    private JLabel TMSP = new JLabel("0.00 DA");
-    private JLabel TMBP = new JLabel("0.00 DA");
-    private JLabel TSP = new JLabel("0.00 DA");
-    private JLabel TBP = new JLabel("0.00 DA");
-    private JLabel TS = new JLabel("0");
+    private final JLabel TMSP = new JLabel("0.00 DA");
+    private final JLabel TMBP = new JLabel("0.00 DA");
+    private final JLabel TSP = new JLabel("0.00 DA");
+    private final JLabel TBP = new JLabel("0.00 DA");
+    private final JLabel TS = new JLabel("0");
     public MedicinePanel() {
         initializeUI();
         loadData();
@@ -891,8 +891,10 @@ class MedicinePanel extends JPanel {
         dataTable.addKeyListener(new KeyAdapter() {
             @Override public void keyPressed(KeyEvent e) {
                 super.keyPressed(e);
-                if (e.getKeyCode() == KeyEvent.VK_UP || e.getKeyCode() == KeyEvent.VK_DOWN) {
-                    updateInfoPanel((int) tableModel.getValueAt(dataTable.getSelectedRow(), 0));
+                if (e.getKeyCode() == KeyEvent.VK_UP) {
+                    updateInfoPanel((int) tableModel.getValueAt(dataTable.getSelectedRow(), 0) - 1);
+                } else if (e.getKeyCode() == KeyEvent.VK_DOWN) {
+                    updateInfoPanel((int) tableModel.getValueAt(dataTable.getSelectedRow(), 0) + 1);
                 }
             }
         });
@@ -913,7 +915,7 @@ class MedicinePanel extends JPanel {
         TBPLabel.setFont(new Font("DejVu", Font.BOLD, 18));
         JLabel TSLabel = new JLabel("Total Stock : ");
         TSLabel.setFont(new Font("DejVu", Font.BOLD, 18));
-        infoPanel.setBorder(new TitledBorder(new EmptyBorder(1,1,1,1),"Info Area"));
+        infoPanel.setBorder(new EmptyBorder(5,5,5,5));
         infoPanel.setLayout(new GridLayout(10,0,1,1));
         infoPanel.add(TMSPLabel);
         infoPanel.add(TMSP);
@@ -1134,7 +1136,7 @@ class SettingPanel extends JPanel {
     public void initializeUI() {
         setLayout(new GridLayout(0, 2, 5, 5));
         addButton("Load Data", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/database_add.png"))), "Load data to a specific table in the database.", this::loadFile);
-        addButton("Button text that is coming soon", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/database_add.png"))), "This is another button.", this::loadFile);
+        addButton("A button that is coming soon", new ImageIcon(Objects.requireNonNull(getClass().getResource("res/database_add.png"))), "This is another button.", this::loadFile);
     }
     private void addButton(String text, ImageIcon icon, String tooltip, ActionListener action) {
         JButton btn = new JButton(text);
