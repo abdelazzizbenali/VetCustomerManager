@@ -56,7 +56,7 @@ public final class Launcher {
             }
             String text = java.nio.file.Files.readString(file);
             java.util.regex.Matcher m = java.util.regex.Pattern
-                    .compile("\"pid\"\s*:\s*(\d+)").matcher(text);
+                    .compile("\"pid\"\\s*:\\s*(\\d+)").matcher(text);
             return m.find() && ProcessHandle.of(Long.parseLong(m.group(1))).isPresent();
         } catch (Throwable t) {
             return false;
