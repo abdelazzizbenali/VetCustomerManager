@@ -1,0 +1,133 @@
+name: Build
+
+# Every push is compile-checked on Linux, and the Windows-ready .exe
+# installer is built on the windows runner (Java is bundled inside,
+# so the final users install nothing but your app).
+#
+# 4.0 layout: ONE installer carries TWO launchers
+#   VetCustomerManager.exe  = JavaFX frontend (client)
+#   vetms-server.exe        = Spring Boot backend (camera + scan pipeline)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["**"]
+
+jobs:
+  compile-check:
+    name: Compile check (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+      - name: Maven package (backend + frontend)
+        run: mvn -B -ntp -DskipTests package
+
+  windows-exe:
+    name: Windows installer (.exe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Maven package + collect runtime jars (both modules)
+        shell: pwsh
+        run: |
+          mvn -B -ntp -DskipTests package
+          New-Item -ItemType Directory -Force target\pkg | Out-Null
+          mvn -B -ntp -DincludeScope=runtime dependency:copy-dependencies "-DoutputDirectory=$((Get-Location).Path)\target\pkg"
+          Copy-Item frontend\target\vetms-4.0.0.jar target\pkg\
+          Copy-Item backend\target\vetms-server-4.0.0.jar target\pkg\
+
+
+      - name: Fetch Dynamsoft Java jar (best effort, optional)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $base = "https://download2.dynamsoft.com/maven/dbr/jar/com/dynamsoft/dbr"
+          $versions = @()
+          try {
+            $x = [xml](Invoke-WebRequest -UseBasicParsing "$base/maven-metadata.xml").Content
+            $versions += @($x.metadata.versioning.versions.version | Where-Object { $_ -and $_ -notmatch "SNAPSHOT|alpha|beta|rc" } | Select-Object -Last 2)
+          } catch { Write-Host "metadata unreadable: $_" }
+          $versions += @("9.6.40.1", "9.6.40", "9.6.0")
+          $ok = $false
+          foreach ($v in ($versions | Where-Object { $_ })) {
+            try {
+              Invoke-WebRequest -UseBasicParsing "$base/$v/dbr-$v.jar" -OutFile "target\pkg\dbr.jar"
+              if ((Get-Item "target\pkg\dbr.jar").Length -gt 500KB) { $ok = $true; Write-Host "Dynamsoft jar bundled (version $v)"; break }
+            } catch { Write-Host "version $v not downloadable" }
+          }
+          if (-not $ok) { Write-Host "DBR JAR UNAVAILABLE - installer will use the free engine only" }
+
+      - name: Download JavaFX jmods (Windows, LTS 25 with 26 fallback)
+        shell: pwsh
+        run: |
+          $got = $null
+          foreach ($v in @("25.0.4", "26.0.1")) {
+            try {
+              Invoke-WebRequest -Uri "https://download2.gluonhq.com/openjfx/$v/openjfx-${v}_windows-x64_bin-jmods.zip" -OutFile jmods.zip
+              if ((Get-Item jmods.zip).Length -gt 5MB) { $got = $v; break }
+            } catch { Write-Host "jmods $v not downloadable" }
+          }
+          if (-not $got) { throw "No JavaFX jmods downloadable" }
+          Set-Content -NoNewline target\jmods.version $got
+          Expand-Archive jmods.zip -DestinationPath target\jmods
+
+      - name: Create embedded runtime image (jlink, serves UI + Spring backend)
+        shell: pwsh
+        run: |
+          $dir = (Get-ChildItem target\jmods -Directory | Where-Object Name -like "javafx-jmods-*" | Select-Object -First 1).Name
+          if (-not $dir) { throw "No extracted jmods folder found under target\jmods" }
+          $jfxv = $dir -replace "javafx-jmods-", ""
+          Write-Host "Using JavaFX jmods $jfxv"
+          jlink --module-path "target\jmods\javafx-jmods-$jfxv;$env:JAVA_HOME\jmods" `
+            --add-modules java.base,java.desktop,java.instrument,java.management,java.naming,java.net.http,java.prefs,java.rmi,java.scripting,java.security.jgss,java.security.sasl,java.sql,java.transaction.xa,java.xml,javafx.base,javafx.graphics,javafx.controls,javafx.swing,javafx.fxml,jdk.crypto.ec,jdk.crypto.mscapi,jdk.jfr,jdk.localedata,jdk.zipfs,jdk.unsupported `
+            --strip-debug --no-man-pages --no-header-files --compress=zip-6 `
+            --output target\runtime
+
+      - name: Install Inno Setup (builds the .exe installer)
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
+          Add-Content $env:GITHUB_PATH (Split-Path $iscc)
+          Write-Host "Inno Setup ready"
+
+      - name: Package app folder (jpackage app-image, two launchers) + Inno installer
+        shell: pwsh
+        run: |
+          Set-Content target\server-launcher.properties "main-class=dev.vetms.server.VetmsServer"
+          Add-Content target\server-launcher.properties "java-options=-Xmx512m"
+          jpackage --verbose --type app-image `
+            --input target\pkg `
+            --main-jar vetms-4.0.0.jar `
+            --main-class dev.parent.Launcher `
+            --runtime-image target\runtime `
+            --name VetCustomerManager `
+            --app-version 4.0.0 `
+            --vendor "AAB" `
+            --description "Veterinary Customer Manager (Supabase online edition)" `
+            --icon packaging\icon.ico `
+            --add-launcher vetms-server=target\server-launcher.properties `
+            --java-options "-Dfile.encoding=UTF-8" `
+            --dest dist\app-image
+          ISCC.exe packaging\installer.iss
+          Get-ChildItem dist\installer
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: VetCustomerManager-Windows-EXE
+          path: dist\installer\*.exe
+          retention-days: 90
