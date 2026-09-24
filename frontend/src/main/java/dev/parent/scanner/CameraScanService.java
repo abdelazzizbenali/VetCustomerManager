@@ -279,7 +279,7 @@ public final class CameraScanService {
             String m = String.valueOf(t.getMessage());
             if (m.contains("opencv_core")) { useOpenCv=false; engineDetail="Webcam-Capture (fallback after OpenCV crash)"; System.err.println("[Camera] OpenCV loop crashed, switching: "+t); }
             setStatus("camera stopped: " + t.getMessage());
-            Log.warn("Camera loop crash: " + t, t);
+            Log.warn("Camera loop crash: " + t);
         } finally { closeCamera(); running=false; if(wantRun) setStatus("camera stopped unexpectedly"); cameraCleanupFromInside(); }
     }
 
@@ -306,7 +306,7 @@ public final class CameraScanService {
                 }
                 decodeImage(image); sleepQuietly(90);
             }
-        } catch (Throwable t) { setStatus("camera stopped (fallback): "+t.getMessage()); Log.warn("fallback loop: "+t, t); }
+        } catch (Throwable t) { setStatus("camera stopped (fallback): "+t.getMessage()); Log.warn("fallback loop: "+t); }
         finally { closeCameraFallback(); running=false; if(wantRun) setStatus("camera stopped unexpectedly"); cameraCleanupFromInside(); }
     }
 
@@ -354,14 +354,14 @@ public final class CameraScanService {
                     lastProbeDetail = "webcam "+cam.getName()+" failed to open";
                 } catch (Throwable t) {
                     lastProbeDetail = "webcam "+cam.getName()+" err: "+t.getMessage();
-                    Log.warn("open webcam "+cam.getName()+" failed", t);
+                    Log.warn("open webcam "+cam.getName()+" failed: "+t);
                 }
             }
             // fallback to default
             try { Webcam def = Webcam.getDefault(); if(def!=null){ prepareAndOpen(def); if(def.isOpen()) return def; } } catch(Throwable ignored){}
         } catch (Throwable t) {
             lastProbeDetail = "webcam-capture failed: "+t.getMessage()+(t.getCause()!=null?" -> "+t.getCause():"");
-            Log.warn("openAnyCameraWebcam failed", t);
+            Log.warn("openAnyCameraWebcam failed: "+t);
         }
         return null;
     }
