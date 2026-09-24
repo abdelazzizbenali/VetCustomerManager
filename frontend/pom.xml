@@ -103,12 +103,6 @@
             <version>2.11.0</version>
         </dependency>
 
-        <!-- Optional premium barcode engine (Dynamsoft) – if present, CameraScanService tries it first -->
-        <dependency>
-            <groupId>com.dynamsoft.dbr</groupId>
-            <artifactId>dbr</artifactId>
-            <version>9.6.40</version>
-        </dependency>
         <!-- Fallback camera driver (pure Java, no OpenBLAS) – used if OpenCV natives fail on this JVM -->
         <dependency>
             <groupId>com.github.sarxos</groupId>
@@ -116,16 +110,6 @@
             <version>0.3.12</version>
         </dependency>
     </dependencies>
-
-    <repositories>
-        <repository>
-            <id>dynamsoft</id>
-            <name>Dynamsoft Barcode Reader</name>
-            <url>https://download2.dynamsoft.com/maven/dbr/jar</url>
-            <releases><enabled>true</enabled></releases>
-            <snapshots><enabled>false</enabled></snapshots>
-        </repository>
-    </repositories>
 
     <build>
         <finalName>vetms-${project.version}</finalName>
