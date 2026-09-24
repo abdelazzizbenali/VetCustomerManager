@@ -1,6 +1,7 @@
 @echo off
 REM =====================================================================
 REM  VetCustomerManager - build the ready-to-use Windows .exe installer
+REM  Online-only edition (Supabase + local SQLite cache, no clinic server)
 REM
 REM  What you need ONCE on your Windows PC:
 REM    1. JDK 25 LTS (https://adoptium.net -> Temurin 25) with JAVA_HOME set
@@ -24,7 +25,7 @@ echo [0/7] CLEAN slate - wiping previous build output (target, dist)...
 if exist target rmdir /s /q target
 if exist dist rmdir /s /q dist
 
-echo [1/7] Building the frontend + backend jars (Maven multi-module)...
+echo [1/7] Building the frontend jar (Maven)...
 call mvn -B -ntp -DskipTests package
 if errorlevel 1 goto :fail
 
@@ -33,12 +34,6 @@ if not exist target\pkg mkdir target\pkg
 call mvn -B -ntp -DskipTests -DincludeScope=runtime dependency:copy-dependencies -DoutputDirectory="%CD%\target\pkg"
 if errorlevel 1 goto :fail
 copy /Y frontend\target\vetms-%APP_VERSION%.jar target\pkg\ >nul
-if errorlevel 1 goto :fail
-copy /Y backend\target\vetms-server-%APP_VERSION%.jar target\pkg\ >nul
-if errorlevel 1 goto :fail
-REM NOTE: vetms-server.exe ships as an OPTIONAL launcher: only the clinic's
-REM database PC ever runs it (Start Menu shortcut). It never starts by itself
-REM and the client auto-kills foreign copies. One process per PC.
 if errorlevel 1 goto :fail
 
 echo      plus optional Dynamsoft premium scanner jar (best effort)...
@@ -74,10 +69,8 @@ if exist target\runtime rmdir /s /q target\runtime
 jlink --module-path "target\jmods\javafx-jmods-%JFX_VERSION%;%JAVA_HOME%\jmods" --add-modules java.base,java.desktop,java.instrument,java.management,java.naming,java.net.http,java.prefs,java.rmi,java.scripting,java.security.jgss,java.security.sasl,java.sql,java.transaction.xa,java.xml,javafx.base,javafx.graphics,javafx.controls,javafx.swing,javafx.fxml,jdk.crypto.ec,jdk.crypto.mscapi,jdk.jfr,jdk.localedata,jdk.zipfs,jdk.unsupported --strip-debug --no-man-pages --no-header-files --compress=zip-6 --output target\runtime
 if errorlevel 1 goto :fail
 
-echo [5/7] Assembling the app folder with jpackage (client + optional server)...
->  target\server-launcher.properties echo main-class=dev.vetms.server.VetmsServer
->> target\server-launcher.properties echo java-options=-Xmx512m
-jpackage --verbose --type app-image --input target\pkg --main-jar vetms-%APP_VERSION%.jar --main-class dev.parent.Launcher --runtime-image target\runtime --name VetCustomerManager --app-version %APP_VERSION% --vendor "AAB" --description "Veterinary Customer Manager - Supabase online edition" --icon packaging\icon.ico --add-launcher vetms-server=target\server-launcher.properties --java-options "-Dfile.encoding=UTF-8" --dest dist\app-image
+echo [5/7] Assembling the app folder with jpackage...
+jpackage --verbose --type app-image --input target\pkg --main-jar vetms-%APP_VERSION%.jar --main-class dev.parent.Launcher --runtime-image target\runtime --name VetCustomerManager --app-version %APP_VERSION% --vendor "AAB" --description "Veterinary Customer Manager - Supabase online edition" --icon packaging\icon.ico --java-options "-Dfile.encoding=UTF-8" --dest dist\app-image
 if errorlevel 1 goto :fail
 
 echo [6/7] Making sure Inno Setup 6 is available (installs via winget once)...

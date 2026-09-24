@@ -33,9 +33,6 @@ public final class AppConfig {
     public static final String CAMERA_PREVIEW = "scanner.camera.preview";
     public static final String DYNAMSOFT_LICENSE = "scanner.dynamsoft.license";
 
-    public static final String REMOTE_SERVER_URL = "server.remote.url";
-    public static final String REMOTE_SERVER_TOKEN = "server.remote.token";
-
     public static final String NOTIFY_EXPIRY_DAYS = "notify.expiry.days";
 
     private final Properties props = new Properties();
@@ -102,31 +99,9 @@ public final class AppConfig {
         props.setProperty(SUPABASE_KEY, key == null ? "" : key.trim());
     }
 
-    /** Clinic-server relay address ("http://192.168.1.15:9677"), empty = direct. */
-    public synchronized String remoteServerUrl() {
-        String s = props.getProperty(REMOTE_SERVER_URL, "").trim();
-        while (s.endsWith("/")) {
-            s = s.substring(0, s.length() - 1);
-        }
-        return s;
-    }
-
-    public synchronized String remoteServerToken() {
-        return props.getProperty(REMOTE_SERVER_TOKEN, "").trim();
-    }
-
-    public synchronized boolean hasRemoteServer() {
-        return !remoteServerUrl().isEmpty() && !remoteServerToken().isEmpty();
-    }
-
-    public synchronized void setRemoteServer(String url, String token) {
-        props.setProperty(REMOTE_SERVER_URL, url == null ? "" : url.trim());
-        props.setProperty(REMOTE_SERVER_TOKEN, token == null ? "" : token.trim());
-    }
-
-    /** True when SOME database route is configured (direct or via a clinic server). */
+    /** True when the online database is configured. */
     public synchronized boolean hasAnyDatabase() {
-        return hasSupabase() || hasRemoteServer();
+        return hasSupabase();
     }
 
     // ---- scanners -------------------------------------------------------------

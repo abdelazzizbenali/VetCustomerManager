@@ -141,25 +141,8 @@ public final class SupabaseClient {
 
     // ------------------------------------------------------------------ core
 
-    /**
-     * Where every REST call goes. If the user configured a clinic server
-     * (Settings -> "Clinic server"), the same Supabase REST path is relayed
-     * through it ({@code /api/supabase/**}) using the server's bearer token;
-     * otherwise the request goes straight to the Supabase project.
-     */
+    /** Every REST call goes straight to the online Supabase project. */
     private HttpRequest.Builder base(String pathAndQuery) {
-        dev.parent.config.AppConfig cfg = dev.parent.config.AppConfig.get();
-        if (cfg.hasRemoteServer()) {
-            String relay = cfg.remoteServerUrl()
-                    + "/api/supabase" + pathAndQuery.substring("/rest/v1".length());
-            return HttpRequest.newBuilder()
-                    .uri(URI.create(relay))
-                    .timeout(Duration.ofSeconds(30))
-                    .header("Authorization", "Bearer " + cfg.remoteServerToken())
-                    .header("Accept", "application/json")
-                    .header("Content-Type", "application/json")
-                    .header("X-Client-Info", "vetcustomermanager-desktop/4.0.0 (via clinic server)");
-        }
         return HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + pathAndQuery))
                 .timeout(Duration.ofSeconds(30))

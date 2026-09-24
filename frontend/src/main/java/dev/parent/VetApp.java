@@ -67,9 +67,9 @@ public class VetApp extends Application {
         }
 
         AppConfig cfg = AppConfig.get();
-        if (!cfg.hasSupabase() && !cfg.hasRemoteServer()) {
+        if (!cfg.hasSupabase()) {
             boolean saved = new SetupWizard().showAndWait(splashStage);
-            if (!saved || (!cfg.hasSupabase() && !cfg.hasRemoteServer())) {
+            if (!saved || !cfg.hasSupabase()) {
                 Log.info("Setup cancelled: shutting down");
                 splashStage.close();
                 Platform.exit();
@@ -144,14 +144,12 @@ public class VetApp extends Application {
 
     private void openMain(Stage primaryStage, SplashScreen splash) {
         AppConfig cfg = AppConfig.get();
-        if (cfg.hasSupabase() || cfg.hasRemoteServer()) {
-            // remote PCs need NO Supabase credentials: every REST call is
-            // relayed through the clinic server automatically.
+        if (cfg.hasSupabase()) {
             SyncService.configure(new SupabaseClient(cfg.supabaseUrl(), cfg.supabaseKey()));
         }
         SyncService.start();
         ScannerService.startSerialReader();
-        ScanRouter.get().start(); // subscribe to the backend's always-on scan pipeline
+        ScanRouter.get().start(); // subscribe to the local camera scan pipeline
 
         new MainWindow(primaryStage);
         primaryStage.setOnCloseRequest(e -> shutdown());

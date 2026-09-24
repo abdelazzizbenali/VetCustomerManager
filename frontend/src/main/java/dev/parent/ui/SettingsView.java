@@ -59,7 +59,7 @@ final class SettingsView extends MainWindow.BaseView {
     private final TextField dynamsoftKey = new TextField();
     private final Label cameraEngineInfo = new Label("Built-in Java camera driver "
             + "(the only engine now - no external programs to leave running behind)");
-    private final Label serverScanStatus = new Label("Backend: checking...");
+    private final Label serverScanStatus = new Label("Camera: checking...");
     private final ComboBox<String> serialPort = new ComboBox<>();
     private final ComboBox<Integer> serialBaud = new ComboBox<>(
             javafx.collections.FXCollections.observableArrayList(1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200));
@@ -106,7 +106,6 @@ final class SettingsView extends MainWindow.BaseView {
         title.getStyleClass().add("view-title");
         root.getChildren().addAll(title,
                 buildSupabaseSection(),
-                buildClinicServerSection(),
                 buildSyncSection(),
                 buildScannerSection(),
                 buildDataSection(),
@@ -147,78 +146,6 @@ final class SettingsView extends MainWindow.BaseView {
         save.getStyleClass().add("accent");
         HBox buttons = new HBox(10, test, save);
         box.getChildren().addAll(grid, buttons, dbStatus);
-        return box;
-    }
-
-    // --------------------------------------------------------- clinic server
-
-    private final TextField remoteUrl = new TextField();
-    private final TextField remoteToken = new TextField();
-
-    /**
-     * One database for the whole clinic: run the optional "Server" launcher
-     * on ONE PC (it serves /api/supabase with ITS Supabase credentials),
-     * then every other PC just points at it - no keys, no setup anywhere else.
-     */
-    private VBox buildClinicServerSection() {
-        VBox box = section("Clinic server (share one database across PCs)");
-        remoteUrl.setText(cfg.remoteServerUrl());
-        remoteUrl.setPromptText("http://192.168.1.15:9677 - leave empty on the server PC");
-        remoteUrl.setPrefColumnCount(34);
-        remoteToken.setText(cfg.remoteServerToken());
-        remoteToken.setPromptText("server token - see %APPDATA%\\VetCustomerManager\\server-info.json on the server PC");
-        remoteToken.setPrefColumnCount(34);
-
-        GridPane grid = new GridPane();
-        grid.getStyleClass().add("form-grid");
-        grid.add(rowLabel("Server address"), 0, 0);
-        grid.add(remoteUrl, 1, 0);
-        grid.add(rowLabel("Server token"), 0, 1);
-        grid.add(remoteToken, 1, 1);
-
-        Button test = Ui.toolButton("Test server link", "refresh.png", () -> {
-            cfg.setRemoteServer(remoteUrl.getText(), remoteToken.getText());
-            cfg.save();
-            if (!cfg.hasRemoteServer()) {
-                FxUtil.error(getWindow(), "Clinic server",
-                        "Fill the server address and token first.");
-                return;
-            }
-            Bg.run("clinic-test", () -> {
-                try {
-                    int v = new SupabaseClient("", "").ping();
-                    javafx.application.Platform.runLater(() -> FxUtil.info(getWindow(),
-                            "Clinic server", "Connected through the server (schema v" + v + ")."));
-                } catch (Throwable t) {
-                    javafx.application.Platform.runLater(() -> FxUtil.error(getWindow(),
-                            "Clinic server", "Server not answering correctly:\n" + t.getMessage()));
-                }
-            });
-        });
-        Button save = Ui.toolButton("Save clinic server", "check.png", () -> {
-            cfg.setRemoteServer(remoteUrl.getText(), remoteToken.getText());
-            cfg.save();
-            if (cfg.hasSupabase() || cfg.hasRemoteServer()) {
-                SyncService.configure(new SupabaseClient(cfg.supabaseUrl(), cfg.supabaseKey()));
-                SyncService.restart();
-            }
-            String mode = cfg.hasRemoteServer()
-                    ? "This PC now works THROUGH the clinic server at "
-                    + cfg.remoteServerUrl() + "\nSame data everywhere - try Sync now."
-                    : "Clinic-server link cleared - this PC uses its own settings.";
-            FxUtil.info(getWindow(), "Clinic server", mode);
-        });
-        save.getStyleClass().add("accent");
-
-        Label hint = new Label("Server PC: leave BOTH fields empty and put the Supabase URL/key "
-                + "in the section above, then start the \"Server (only on the clinic's database PC)\" "
-                + "shortcut from the Start Menu and leave it running (the address it serves is written "
-                + "into server-info.json).\n"
-                + "Other PCs: paste the server PC's address and token here. Every scan and edit then "
-                + "goes through the server - one database for the whole clinic.");
-        hint.getStyleClass().add("hint");
-        hint.setWrapText(true);
-        box.getChildren().addAll(grid, new HBox(10, test, save), hint);
         return box;
     }
 
@@ -297,9 +224,9 @@ final class SettingsView extends MainWindow.BaseView {
         HBox.setHgrow(dynamsoftKey, Priority.ALWAYS);
         dynamsoftKey.setPrefWidth(320);
         grid.add(keyRow, 1, 4);
-        grid.add(rowLabel("Camera engine (backend)"), 0, 5);
+        grid.add(rowLabel("Camera engine"), 0, 5);
         grid.add(cameraEngineInfo, 1, 5);
-        grid.add(rowLabel("Backend scanner"), 0, 6);
+        grid.add(rowLabel("Camera status"), 0, 6);
         grid.add(serverScanStatus, 1, 6);
         serialPort.setEditable(true);
         serialPort.setPrefWidth(160);
@@ -334,21 +261,52 @@ final class SettingsView extends MainWindow.BaseView {
     }
 
     private void saveDynamsoftKey() {
-        cfg.setDynamsoftLicense(dynamsoftKey.getText());
+        String key = dynamsoftKey.getText() == null ? "" : dynamsoftKey.getText().trim();
+        cfg.setDynamsoftLicense(key);
         cfg.save();
-        // the premium engine lives in THIS process now: reload it in place
         Thread.ofVirtual().name("vetms-dynamsoft-save").start(() -> {
-            dev.parent.scanner.DynamsoftLocal.reinit();
-            boolean live = dev.parent.scanner.DynamsoftLocal.isAvailable();
-            String engineMsg = dev.parent.scanner.DynamsoftLocal.lastError();
-            String msg = live
-                    ? "Dynamsoft premium scanning is now ACTIVE.\nShow a barcode to the camera!"
-                    : dynamsoftKey.getText().isBlank()
-                    ? "Key cleared - the free built-in scanner engine is used."
-                    : "The engine did not start.\n\nReason: " + engineMsg
-                    + "\n\nThe free engine keeps scanning meanwhile.";
+            String msg;
+            if (key.isBlank()) {
+                dev.parent.scanner.DynamsoftLocal.reinit();
+                msg = "Key cleared \u2013 free engine (ZXing) is active.\nScanning works without any key.";
+            } else {
+                boolean jarPresent;
+                try {
+                    Class.forName("com.dynamsoft.dbr.BarcodeReader");
+                    jarPresent = true;
+                } catch (ClassNotFoundException e1) {
+                    try {
+                        Class.forName("com.dynamsoft.barcode.BarcodeReader");
+                        jarPresent = true;
+                    } catch (ClassNotFoundException e2) {
+                        jarPresent = false;
+                    }
+                }
+                if (!jarPresent) {
+                    dev.parent.scanner.DynamsoftLocal.reinit();
+                    msg = "Key saved.\n\nPremium engine not bundled in this installer \u2013 "
+                            + "the free engine (ZXing) stays active and scans perfectly.\n\n"
+                            + "To enable Dynamsoft premium: rebuild the installer after "
+                            + "the Dynamsoft jar is downloaded (see README) \u2013 your saved key "
+                            + "will activate automatically.";
+                } else {
+                    dev.parent.scanner.DynamsoftLocal.reinit();
+                    boolean live = dev.parent.scanner.DynamsoftLocal.isAvailable();
+                    String engineMsg = dev.parent.scanner.DynamsoftLocal.lastError();
+                    if (live) {
+                        msg = "Dynamsoft premium scanning is now ACTIVE.\nShow a barcode to the camera!";
+                    } else if (engineMsg.toLowerCase().contains("no dynamsoft library")) {
+                        msg = "Key saved but premium jar not found \u2013 free engine stays active.\n\n"
+                                + "Rebuild the installer with the Dynamsoft jar to unlock premium.";
+                    } else {
+                        msg = "Key saved but the engine did not start.\n\nReason: " + engineMsg
+                                + "\n\nFree engine (ZXing) keeps scanning \u2013 check the key or try a fresh trial key from dynamsoft.com.";
+                    }
+                }
+            }
+            String finalMsg = msg;
             javafx.application.Platform.runLater(
-                    () -> FxUtil.info(getWindow(), "License key", msg));
+                    () -> FxUtil.info(getWindow(), "License key", finalMsg));
             refreshDataLater();
         });
     }

@@ -49,7 +49,6 @@ public final class SplashScreen {
             "Loading configuration",
             "Opening local database",
             "Checking sound system",
-            "Starting backend service (Spring Boot)",
             "Detecting camera scan engine",
             "Starting barcode scanner driver",
             "Contacting online database (Supabase)"
@@ -123,12 +122,11 @@ public final class SplashScreen {
                     case 1 -> checkConfig(cfg);
                     case 2 -> checkLocalDb();
                     case 3 -> checkSound();
-                    case 4 -> checkBackend();
-                    case 5 -> checkCamera();
-                    case 6 -> checkScanner();
+                    case 4 -> checkCamera();
+                    case 5 -> checkScanner();
                     default -> checkSupabase(cfg);
                 };
-                if (step == 7 && r.status() == CheckStatus.OK) {
+                if (step == 6 && r.status() == CheckStatus.OK) {
                     supabaseOnline = true;
                 }
                 results.add(r);
@@ -197,33 +195,28 @@ public final class SplashScreen {
                 "No audio output - scan sounds will be silent", false);
     }
 
-    /** Starts the built-in, local camera engine (one JVM, no second EXE). */
-    private CheckResult checkBackend() {
-        try {
-            if (dev.parent.config.AppConfig.get().cameraAlwaysOn()) {
-                dev.parent.scanner.CameraScanService.get().start();
-            }
-            return new CheckResult(NAMES[4], CheckStatus.OK,
-                    "Camera engine ready - everything runs inside this one program", false);
-        } catch (Throwable t) {
-            return new CheckResult(NAMES[4], CheckStatus.WARN,
-                    "Camera engine problem: " + t.getMessage()
-                            + " - USB/serial scanners still work", false);
-        }
-    }
-
     private CheckResult checkCamera() {
         try {
+            // Pre-load & probe the built-in camera (OpenCV) – start only if enabled
+            if (dev.parent.config.AppConfig.get().cameraAlwaysOn()) {
+                try { dev.parent.scanner.CameraScanService.get().start(); } catch (Throwable ignored) {}
+            }
             boolean present = dev.parent.scanner.CameraScanService.probeAny();
             if (present) {
-                return new CheckResult(NAMES[5], CheckStatus.OK,
+                return new CheckResult(NAMES[4], CheckStatus.OK,
                         "Camera detected - built-in video engine"
                                 + " - always-on decoding, no button to press", false);
             }
-            return new CheckResult(NAMES[5], CheckStatus.WARN,
+            String err = dev.parent.scanner.CameraScanService.nativesError();
+            if (!err.isBlank()) {
+                return new CheckResult(NAMES[4], CheckStatus.WARN,
+                        "Camera engine not ready (" + abbreviate(err)
+                                + ") - USB/serial scanners still work", false);
+            }
+            return new CheckResult(NAMES[4], CheckStatus.WARN,
                     "No camera found - you can still use a USB or serial barcode scanner", false);
         } catch (Throwable t) {
-            return new CheckResult(NAMES[5], CheckStatus.WARN,
+            return new CheckResult(NAMES[4], CheckStatus.WARN,
                     "Camera probe failed (" + abbreviate(t.getMessage())
                             + ") - USB/serial scanners still work", false);
         }

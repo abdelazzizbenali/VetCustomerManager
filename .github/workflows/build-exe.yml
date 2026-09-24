@@ -3,10 +3,7 @@ name: Build
 # Every push is compile-checked on Linux, and the Windows-ready .exe
 # installer is built on the windows runner (Java is bundled inside,
 # so the final users install nothing but your app).
-#
-# 4.0 layout: ONE installer carries TWO launchers
-#   VetCustomerManager.exe  = JavaFX frontend (client)
-#   vetms-server.exe        = Spring Boot backend (camera + scan pipeline)
+# Single-process edition: online Supabase only (no clinic server).
 
 on:
   workflow_dispatch:
@@ -24,7 +21,7 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: maven
-      - name: Maven package (backend + frontend)
+      - name: Maven package (frontend)
         run: mvn -B -ntp -DskipTests package
 
   windows-exe:
@@ -39,14 +36,13 @@ jobs:
           java-version: "25"
           cache: maven
 
-      - name: Maven package + collect runtime jars (both modules)
+      - name: Maven package + collect runtime jars
         shell: pwsh
         run: |
           mvn -B -ntp -DskipTests package
           New-Item -ItemType Directory -Force target\pkg | Out-Null
           mvn -B -ntp -DincludeScope=runtime dependency:copy-dependencies "-DoutputDirectory=$((Get-Location).Path)\target\pkg"
           Copy-Item frontend\target\vetms-4.0.0.jar target\pkg\
-          Copy-Item backend\target\vetms-server-4.0.0.jar target\pkg\
 
 
       - name: Fetch Dynamsoft Java jar (best effort, optional)
@@ -83,7 +79,7 @@ jobs:
           Set-Content -NoNewline target\jmods.version $got
           Expand-Archive jmods.zip -DestinationPath target\jmods
 
-      - name: Create embedded runtime image (jlink, serves UI + Spring backend)
+      - name: Create embedded runtime image (jlink)
         shell: pwsh
         run: |
           $dir = (Get-ChildItem target\jmods -Directory | Where-Object Name -like "javafx-jmods-*" | Select-Object -First 1).Name
@@ -104,11 +100,9 @@ jobs:
           Add-Content $env:GITHUB_PATH (Split-Path $iscc)
           Write-Host "Inno Setup ready"
 
-      - name: Package app folder (jpackage app-image, two launchers) + Inno installer
+      - name: Package app folder (jpackage app-image) + Inno installer
         shell: pwsh
         run: |
-          Set-Content target\server-launcher.properties "main-class=dev.vetms.server.VetmsServer"
-          Add-Content target\server-launcher.properties "java-options=-Xmx512m"
           jpackage --verbose --type app-image `
             --input target\pkg `
             --main-jar vetms-4.0.0.jar `
@@ -119,7 +113,6 @@ jobs:
             --vendor "AAB" `
             --description "Veterinary Customer Manager (Supabase online edition)" `
             --icon packaging\icon.ico `
-            --add-launcher vetms-server=target\server-launcher.properties `
             --java-options "-Dfile.encoding=UTF-8" `
             --dest dist\app-image
           ISCC.exe packaging\installer.iss

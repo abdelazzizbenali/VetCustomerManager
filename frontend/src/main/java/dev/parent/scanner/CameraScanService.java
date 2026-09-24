@@ -67,13 +67,48 @@ public final class CameraScanService {
         if (nativesOk) {
             return true;
         }
+        // OpenBLAS is a heavy math dependency of opencv_core that is NOT needed
+        // for VideoCapture / JPEG – but its static initializer can fail on some
+        // Windows + JDK25 combos with "Could not initialize class openblas_nolapack".
+        // We disable its auto-load (see bytedeco/javacpp-presets#1203) and only
+        // load the modules we actually use. The explicit openblas deps in pom
+        // still bundle the natives for the cases where they are desired.
         try {
+            if (System.getProperty("org.bytedeco.openblas.load") == null) {
+                System.setProperty("org.bytedeco.openblas.load", "none");
+            }
+        } catch (Throwable ignored) {
+        }
+        Throwable firstError = null;
+        try {
+            Loader.load(org.bytedeco.opencv.global.opencv_videoio.class);
+            Loader.load(org.bytedeco.opencv.global.opencv_imgcodecs.class);
+            // opencv_core is optional here – with openblas disabled it won't pull it
+            try {
+                Loader.load(org.bytedeco.opencv.global.opencv_core.class);
+            } catch (Throwable ignored) {
+            }
+            nativesOk = true;
+            nativesError = "";
+            return true;
+        } catch (Throwable t) {
+            firstError = t;
+        }
+        // Fallback: try the classic core load (may succeed if openblas natives are present)
+        try {
+            System.clearProperty("org.bytedeco.openblas.load");
             Loader.load(org.bytedeco.opencv.global.opencv_core.class);
             nativesOk = true;
             nativesError = "";
             return true;
         } catch (Throwable t) {
-            nativesError = String.valueOf(t.getMessage());
+            String msg = firstError != null ? String.valueOf(firstError.getMessage()) : "";
+            String second = String.valueOf(t.getMessage());
+            if (!second.isBlank() && !second.equals(msg)) {
+                msg = msg.isBlank() ? second : msg + " | " + second;
+            }
+            if (msg.isBlank()) msg = t.toString();
+            nativesError = msg;
             return false;
         }
     }

@@ -38,11 +38,9 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Files]
 Source: "..\dist\app-image\VetCustomerManager\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
-Source: "vetms-server-lan.cmd"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\VetCustomerManager.exe"
-Name: "{group}\Server (only on the clinic's database PC)"; Filename: "{cmd}"; Parameters: "/c ""{app}\vetms-server-lan.cmd"""; WorkingDir: "{app}"
 Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\VetCustomerManager.exe"; Tasks: desktopicon
 
 [InstallDelete]
@@ -65,8 +63,6 @@ var
   ResultCode: Integer;
 begin
   Exec('taskkill.exe', '/IM VetCustomerManager.exe /T /F', '', SW_HIDE,
-    ewWaitUntilTerminated, ResultCode);
-  Exec('taskkill.exe', '/IM vetms-server.exe /T /F', '', SW_HIDE,
     ewWaitUntilTerminated, ResultCode);
 end;
 

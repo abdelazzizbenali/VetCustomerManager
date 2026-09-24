@@ -4,11 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <!--
-      VetCustomerManager - split into two processes shipped inside ONE installer:
-        backend/  spring-boot microservice  = camera, scan pipeline, checks
-        frontend/ JavaFX client               = every screen, offline-first data
-    -->
+    <!-- VetCustomerManager - single JavaFX desktop app (online Supabase only, offline cache) -->
     <groupId>dev.parent</groupId>
     <artifactId>vetms-suite</artifactId>
     <version>4.0.0</version>
@@ -16,7 +12,6 @@
     <name>VetCustomerManager suite</name>
 
     <modules>
-        <module>backend</module>
         <module>frontend</module>
     </modules>
 

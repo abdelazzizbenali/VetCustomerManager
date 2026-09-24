@@ -54,7 +54,7 @@ public final class SetupWizard {
         expl.getStyleClass().add("splash-sub");
 
         TextField urlField = new TextField(cfg.supabaseUrl());
-        urlField.setPromptText("https://yourproject.supabase.co - OR http://SERVER-IP:9677 for a sister PC");
+        urlField.setPromptText("https://yourproject.supabase.co");
         urlField.setPrefColumnCount(32);
         PasswordField keyFieldHidden = new PasswordField();
         keyFieldHidden.setText(cfg.supabaseKey());
@@ -108,7 +108,10 @@ public final class SetupWizard {
         Runnable runTest = () -> {
             String url = urlField.getText();
             String key = keyFieldHidden.isVisible() ? keyFieldHidden.getText() : keyFieldShown.getText();
-            routeToCorrectPlace(url, key, cfg);          // Supabase direct OR clinic server
+            String u = url == null ? "" : url.trim();
+            String k = key == null ? "" : key.trim();
+            cfg.setSupabase(SupabaseClient.normalizeBaseUrl(u), k);
+            cfg.save();
             status.setStyle("-fx-text-fill:#FFB300;");
             status.setText("Contacting the database...");
             spinner.setVisible(true);
@@ -156,7 +159,9 @@ public final class SetupWizard {
                 status.setText("Please enter both the Project URL and the API key.");
                 return;
             }
-            routeToCorrectPlace(url, key, cfg);
+            String u = url == null ? "" : url.trim();
+            String k = key == null ? "" : key.trim();
+            cfg.setSupabase(SupabaseClient.normalizeBaseUrl(u), k);
             cfg.save();
             saved = true;
             stage.close();
@@ -179,24 +184,5 @@ public final class SetupWizard {
         return saved;
     }
 
-    /**
-     * Where does this URL+key go?
-     * A true Supabase project URL goes into the direct slots; anything else
-     * (a sister PC points at the clinic server: http://192.168.x.x:9677)
-     * becomes the clinic-server link, and {@link dev.parent.db.SupabaseClient}
-     * relays every call through it.
-     */
-    private static void routeToCorrectPlace(String url, String key, AppConfig cfg) {
-        String u = url == null ? "" : url.trim();
-        String k = key == null ? "" : key.trim();
-        if (u.contains(".supabase.co")) {
-            cfg.setSupabase(SupabaseClient.normalizeBaseUrl(u), k);
-            cfg.setRemoteServer("", "");       // direct beats relay
-        } else {
-            while (u.endsWith("/")) {
-                u = u.substring(0, u.length() - 1);
-            }
-            cfg.setRemoteServer(u, k);          // key field carries the server token
-        }
-    }
+    // (clinic-server routing removed – every install connects directly to Supabase)
 }

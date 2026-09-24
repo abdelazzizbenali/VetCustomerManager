@@ -18,23 +18,18 @@ public final class Launcher {
     }
 
     /**
-     * Self-defense: older 4.0 builds left vetms-server.exe running (it kept
-     * the camera hostage AFTER the app was closed/uninstalled). At every
-     * launch, any copy of OUR processes that is not this JVM gets killed.
-     * Best effort, Windows only, invisible everywhere else.
+     * Self-defense: older 4.0 builds left VetCustomerManager.exe running after
+     * the app was closed. At every launch, any orphan copy that is not this JVM
+     * gets killed. Best effort, Windows only.
+     * Database is now online-only – no clinic-server process to spare.
      */
     private static void killOrphanedCopies() {
         try {
             if (!System.getProperty("os.name", "").toLowerCase().contains("win")) {
-                return; // nowhere else can a process outlive us
+                return;
             }
             long self = ProcessHandle.current().pid();
-            // A live server on THIS machine is deliberate (clinic-server PC):
-            // its server-info.json points at a running pid -> spare it.
-            String killList = "VetCustomerManager.exe' OR Name='scan-cam.exe";
-            if (!clinicServerAlive()) {
-                killList = "vetms-server.exe' OR Name='" + killList;
-            }
+            String killList = "VetCustomerManager.exe' OR Name='scan-cam.exe' OR Name='vetms-server.exe";
             String ps = "Get-CimInstance Win32_Process -Filter \"Name='" + killList + "'\" "
                     + "| Where-Object { $_.ProcessId -ne " + self + " } "
                     + "| ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {} }";
@@ -44,22 +39,6 @@ public final class Launcher {
                     .waitFor();
         } catch (Throwable ignored) {
             // never let hygiene break the launch
-        }
-    }
-
-    /** server-info.json names a still-running pid -> the server is wanted here. */
-    private static boolean clinicServerAlive() {
-        try {
-            java.nio.file.Path file = dev.parent.config.AppDirs.dataDir().resolve("server-info.json");
-            if (!java.nio.file.Files.isRegularFile(file)) {
-                return false;
-            }
-            String text = java.nio.file.Files.readString(file);
-            java.util.regex.Matcher m = java.util.regex.Pattern
-                    .compile("\"pid\"\\s*:\\s*(\\d+)").matcher(text);
-            return m.find() && ProcessHandle.of(Long.parseLong(m.group(1))).isPresent();
-        } catch (Throwable t) {
-            return false;
         }
     }
 }
