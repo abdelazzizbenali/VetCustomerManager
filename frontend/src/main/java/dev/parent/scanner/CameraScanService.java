@@ -209,14 +209,14 @@ public final class CameraScanService {
     }
     private static boolean probeWebcamFallbackDetailed(StringBuilder out) {
         try {
-            List<Webcam> webcams = Webcam.getWebcams(2000);
+            List<Webcam> webcams = Webcam.getWebcams();
             if (webcams != null && !webcams.isEmpty()) {
                 out.append("webcam-capture found ").append(webcams.size()).append(" device(s)");
                 lastProbeDetail = out.toString();
                 return true;
             }
             // also try default with timeout
-            Webcam d = Webcam.getDefault(1000);
+            Webcam d = Webcam.getDefault();
             if (d != null) {
                 out.append("webcam-capture default=").append(d.getName());
                 lastProbeDetail = out.toString();
@@ -334,12 +334,12 @@ public final class CameraScanService {
 
     private Webcam openAnyCameraWebcam() {
         try {
-            List<Webcam> webcams = Webcam.getWebcams(3000);
+            List<Webcam> webcams = Webcam.getWebcams();
             if (webcams==null || webcams.isEmpty()) {
                 lastProbeDetail = "Webcam.getWebcams() returned 0 devices";
                 // try default as last resort
                 try {
-                    Webcam def = Webcam.getDefault(1500);
+                    Webcam def = Webcam.getDefault();
                     if (def != null) {
                         prepareAndOpen(def);
                         if (def.isOpen()) { lastProbeDetail = "default webcam "+def.getName(); return def; }
@@ -358,7 +358,7 @@ public final class CameraScanService {
                 }
             }
             // fallback to default
-            try { Webcam def = Webcam.getDefault(1500); if(def!=null){ prepareAndOpen(def); if(def.isOpen()) return def; } } catch(Throwable ignored){}
+            try { Webcam def = Webcam.getDefault(); if(def!=null){ prepareAndOpen(def); if(def.isOpen()) return def; } } catch(Throwable ignored){}
         } catch (Throwable t) {
             lastProbeDetail = "webcam-capture failed: "+t.getMessage()+(t.getCause()!=null?" -> "+t.getCause():"");
             Log.warn("openAnyCameraWebcam failed", t);
