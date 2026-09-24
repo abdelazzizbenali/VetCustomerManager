@@ -328,9 +328,15 @@ final class SettingsView extends MainWindow.BaseView {
                 // also try to list webcam-capture devices directly
                 String webcamList = "";
                 try {
-                    var webcams = com.github.sarxos.webcam.Webcam.getWebcams(1500);
-                    webcamList = webcams == null ? "null" : webcams.size() + " device(s): " + webcams;
-                } catch (Throwable t) { webcamList = "Webcam.getWebcams() failed: " + t.getMessage(); }
+                    // run on platform thread to avoid 'Cannot execute task' on virtual threads
+                    var webcams = java.util.concurrent.Executors.newSingleThreadExecutor(r -> { Thread th=new Thread(r); th.setDaemon(true); return th; }).submit(() -> com.github.sarxos.webcam.Webcam.getWebcams()).get(4, java.util.concurrent.TimeUnit.SECONDS);
+                    if (webcams == null) webcamList = "null";
+                    else {
+                        long physical = webcams.stream().filter(w -> { String n=w.getName().toLowerCase(); return !n.contains("virtual") && !n.contains("mirametrix"); }).count();
+                        webcamList = webcams.size() + " device(s): " + webcams + " | physical=" + physical;
+                        if (physical==0 && webcams.size()>0) webcamList += " (only virtual/Mirametrix found — disable it in Device Manager to expose real camera)";
+                    }
+                } catch (Throwable t) { webcamList = "Webcam.getWebcams() failed: " + (t.getCause()!=null?t.getCause().getMessage():t.getMessage()); }
                 diag = "Running: " + running + "\nStatus: " + status
                         + "\nEngine: " + detail
                         + "\nProbe: " + (probe ? "found" : "none")

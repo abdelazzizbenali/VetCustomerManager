@@ -24,6 +24,12 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.bytedeco.opencv.global.opencv_imgcodecs.imencode;
 import static org.bytedeco.opencv.global.opencv_videoio.CAP_ANY;
@@ -209,14 +215,15 @@ public final class CameraScanService {
     }
     private static boolean probeWebcamFallbackDetailed(StringBuilder out) {
         try {
-            List<Webcam> webcams = Webcam.getWebcams();
+            List<Webcam> webcams = getWebcamsOnPlatformThread();
             if (webcams != null && !webcams.isEmpty()) {
-                out.append("webcam-capture found ").append(webcams.size()).append(" device(s)");
+                String names = webcams.stream().map(w -> w.getName()).collect(Collectors.joining(", "));
+                long physical = webcams.stream().filter(w -> !isVirtualCamera(w.getName())).count();
+                out.append("webcam-capture found ").append(webcams.size()).append(" device(s) [").append(names).append("]; physical=").append(physical);
                 lastProbeDetail = out.toString();
                 return true;
             }
-            // also try default with timeout
-            Webcam d = Webcam.getDefault();
+            Webcam d = getDefaultWebcamOnPlatformThread();
             if (d != null) {
                 out.append("webcam-capture default=").append(d.getName());
                 lastProbeDetail = out.toString();
@@ -229,6 +236,31 @@ public final class CameraScanService {
             Log.warn("webcam probe failed: " + t);
             return false;
         }
+    }
+
+    private static List<Webcam> getWebcamsOnPlatformThread() throws Exception {
+        return callOnPlatformThread(() -> Webcam.getWebcams(), 4000);
+    }
+    private static Webcam getDefaultWebcamOnPlatformThread() throws Exception {
+        return callOnPlatformThread(() -> Webcam.getDefault(), 2500);
+    }
+    private static <T> T callOnPlatformThread(Callable<T> task, long timeoutMs) throws Exception {
+        ExecutorService ex = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "webcam-platform");
+            t.setDaemon(true);
+            return t;
+        });
+        try {
+            Future<T> f = ex.submit(task);
+            return f.get(timeoutMs, TimeUnit.MILLISECONDS);
+        } finally {
+            ex.shutdownNow();
+        }
+    }
+    private static boolean isVirtualCamera(String name) {
+        if (name == null) return false;
+        String n = name.toLowerCase();
+        return n.contains("virtual") || n.contains("mirametrix") || n.contains("obs virtual") || n.contains("xsplit");
     }
 
     private void loop() {
@@ -333,37 +365,63 @@ public final class CameraScanService {
     }
 
     private Webcam openAnyCameraWebcam() {
+        StringBuilder diag = new StringBuilder();
         try {
-            List<Webcam> webcams = Webcam.getWebcams();
+            List<Webcam> webcams = getWebcamsOnPlatformThread();
             if (webcams==null || webcams.isEmpty()) {
                 lastProbeDetail = "Webcam.getWebcams() returned 0 devices";
-                // try default as last resort
                 try {
-                    Webcam def = Webcam.getDefault();
+                    Webcam def = getDefaultWebcamOnPlatformThread();
                     if (def != null) {
-                        prepareAndOpen(def);
+                        prepareAndOpenOnPlatformThread(def);
                         if (def.isOpen()) { lastProbeDetail = "default webcam "+def.getName(); return def; }
                     }
                 } catch (Throwable t2) { lastProbeDetail += " | default also failed: "+t2.getMessage(); }
                 return null;
             }
-            for (Webcam cam : webcams) {
+            diag.append("found ").append(webcams.size()).append(": ");
+            diag.append(webcams.stream().map(w -> w.getName()).collect(Collectors.joining(", ")));
+            // Try physical cameras first, then virtual
+            List<Webcam> physical = webcams.stream().filter(w -> !isVirtualCamera(w.getName())).collect(Collectors.toList());
+            List<Webcam> virtual  = webcams.stream().filter(w -> isVirtualCamera(w.getName())).collect(Collectors.toList());
+            List<Webcam> ordered = new java.util.ArrayList<>();
+            ordered.addAll(physical);
+            ordered.addAll(virtual);
+            if (virtual.size() > 0 && physical.isEmpty()) {
+                diag.append(" | NOTE: only virtual camera(s) found (Mirametrix/OBS) — real camera may be disabled by Windows Privacy or unplugged");
+            }
+            StringBuilder errors = new StringBuilder();
+            for (Webcam cam : ordered) {
                 try {
-                    prepareAndOpen(cam);
-                    if (cam.isOpen()) { lastProbeDetail = "webcam "+cam.getName(); return cam; }
-                    lastProbeDetail = "webcam "+cam.getName()+" failed to open";
+                    prepareAndOpenOnPlatformThread(cam);
+                    if (cam.isOpen()) { lastProbeDetail = diag + " | opened "+cam.getName(); return cam; }
+                    errors.append(cam.getName()).append(": failed to open; ");
                 } catch (Throwable t) {
-                    lastProbeDetail = "webcam "+cam.getName()+" err: "+t.getMessage();
+                    String msg = t.getMessage()==null? t.toString(): t.getMessage();
+                    if (msg.contains("Cannot execute task")) {
+                        errors.append(cam.getName()).append(": Cannot execute task (virtual-camera driver blocked — try closing eye-tracker/OBS or disable Mirametrix in Device Manager); ");
+                    } else {
+                        errors.append(cam.getName()).append(" err: ").append(msg).append("; ");
+                    }
                     Log.warn("open webcam "+cam.getName()+" failed: "+t);
                 }
             }
+            lastProbeDetail = diag.toString() + " | " + errors.toString().trim();
             // fallback to default
-            try { Webcam def = Webcam.getDefault(); if(def!=null){ prepareAndOpen(def); if(def.isOpen()) return def; } } catch(Throwable ignored){}
+            try { Webcam def = getDefaultWebcamOnPlatformThread(); if(def!=null){ prepareAndOpenOnPlatformThread(def); if(def.isOpen()) return def; } } catch(Throwable ignored){}
         } catch (Throwable t) {
             lastProbeDetail = "webcam-capture failed: "+t.getMessage()+(t.getCause()!=null?" -> "+t.getCause():"");
             Log.warn("openAnyCameraWebcam failed: "+t);
         }
+        // also try OpenCV once more for any index that might have been blocked by virtual driver
+        if (lastProbeDetail.contains("only virtual")) {
+            lastProbeDetail += " | Tip: Disable 'Mirametrix Virtual Camera' in Device Manager -> Cameras, then unplug/replug real camera";
+        }
         return null;
+    }
+
+    private static void prepareAndOpenOnPlatformThread(Webcam cam) throws Exception {
+        callOnPlatformThread(() -> { prepareAndOpen(cam); return null; }, 5000);
     }
 
     private static void prepareAndOpen(Webcam cam) {
