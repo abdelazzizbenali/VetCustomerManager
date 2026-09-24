@@ -20,6 +20,7 @@ cd /d "%~dp0"
 set APP_VERSION=4.0.0
 set JFX_VERSION=21.0.5
 set INNO_DIR=C:\Program Files (x86)\Inno Setup 6
+set INNO_DIR2=C:\Program Files\Inno Setup 6
 
 echo [0/7] CLEAN slate - wiping previous build output (target, dist)...
 if exist target rmdir /s /q target
@@ -37,13 +38,29 @@ copy /Y frontend\target\vetms-%APP_VERSION%.jar target\pkg\ >nul
 if errorlevel 1 goto :fail
 
 echo      plus optional Dynamsoft premium scanner jar (best effort)...
-powershell -NoProfile -Command "$bh='https://download2.dynamsoft.com/maven/dbr/jar/com/dynamsoft/dbr'; $bp='http://download2.dynamsoft.com/maven/dbr/jar/com/dynamsoft/dbr'; $vs=@(); foreach($b in @($bh,$bp)){ try{ $x=[xml](Invoke-WebRequest -UseBasicParsing \"${b}/maven-metadata.xml\" -SkipCertificateCheck -TimeoutSec 12).Content; $vs+=@($x.metadata.versioning.versions.version | Select-Object -Last 2); if($vs.Count -gt 0){break} }catch{} } $vs+=@('9.6.40.1','9.6.40','9.6.0','11.6.3000'); $ok=$false; foreach($v in ($vs | ? {$_} | Select-Object -Unique)){ foreach($b in @($bh,$bp)){ try{ Invoke-WebRequest -UseBasicParsing \"${b}/${v}/dbr-${v}.jar\" -OutFile 'target\pkg\dbr.jar' -SkipCertificateCheck -TimeoutSec 20; if((Get-Item 'target\pkg\dbr.jar').Length -gt 400000){ $ok=$true; break } }catch{} } if($ok){break} } if(-not $ok){ try{ mvn -B -ntp dependency:get '-Dartifact=com.dynamsoft:dbr:9.6.40' '-DremoteRepositories=dbr::default::https://download2.dynamsoft.com/maven/dbr/jar' '-Dtransitive=false' | Out-Null; $loc=\"$env:USERPROFILE\.m2\repository\com\dynamsoft\dbr\9.6.40\dbr-9.6.40.jar\"; if(Test-Path $loc){ Copy-Item $loc 'target\pkg\dbr.jar' -Force } }catch{} }"
+powershell -NoProfile -Command "$bh='https://download2.dynamsoft.com/maven/dbr/jar/com/dynamsoft/dbr'; $bp='http://download2.dynamsoft.com/maven/dbr/jar/com/dynamsoft/dbr'; $vs=@(); foreach($b in @($bh,$bp)){ try{ $x=[xml](Invoke-WebRequest -UseBasicParsing \"${b}/maven-metadata.xml\" -TimeoutSec 12).Content; $vs+=@($x.metadata.versioning.versions.version | Select-Object -Last 2); if($vs.Count -gt 0){break} }catch{} } $vs+=@('9.6.40.1','9.6.40','9.6.0','11.6.3000'); $ok=$false; foreach($v in ($vs | ? {$_} | Select-Object -Unique)){ foreach($b in @($bh,$bp)){ try{ Invoke-WebRequest -UseBasicParsing \"${b}/${v}/dbr-${v}.jar\" -OutFile 'target\pkg\dbr.jar' -TimeoutSec 20; if((Get-Item 'target\pkg\dbr.jar').Length -gt 400000){ $ok=$true; break } }catch{} } if($ok){break} } if(-not $ok){ try{ mvn -B -ntp dependency:get '-Dartifact=com.dynamsoft:dbr:9.6.40' '-DremoteRepositories=dbr::default::https://download2.dynamsoft.com/maven/dbr/jar' '-Dtransitive=false' | Out-Null; $loc=\"$env:USERPROFILE\.m2\repository\com\dynamsoft\dbr\9.6.40\dbr-9.6.40.jar\"; if(Test-Path $loc){ Copy-Item $loc 'target\pkg\dbr.jar' -Force } }catch{} }"
 if exist target\pkg\dbr.jar echo      Dynamsoft jar bundled - premium engine ready.
 if not exist target\pkg\dbr.jar echo      Dynamsoft jar skipped - built-in engine will still scan fine.
 
 echo [3/7] Downloading JavaFX jmods (LTS 21.0.5, fallback 25.0.4)...
-powershell -NoProfile -Command "$ok=$false; foreach($v in @('21.0.5','25.0.4')){ try { Invoke-WebRequest -Uri \"https://download2.gluonhq.com/openjfx/$v/openjfx-${v}_windows-x64_bin-jmods.zip\" -OutFile 'target\jmods.zip'; if((Get-Item 'target\jmods.zip').Length -gt 5MB){ Set-Content -NoNewline target\jmods.version $v; $ok=$true; break } } catch {} }; if(-not $ok){ exit 1 }"
-if errorlevel 1 goto :jmods_manual
+if exist target\jmods\javafx-jmods-21.0.5 goto :jmods_ok
+if exist target\jmods\javafx-jmods-25.0.4 goto :jmods_ok
+:: Re-use already downloaded zip if present
+if exist target\jmods.zip (
+  echo      Found existing target\jmods.zip, extracting...
+  powershell -NoProfile -Command "Expand-Archive -Force 'target\jmods.zip' 'target\jmods' 2>$null"
+  if exist target\jmods\javafx-jmods-21.0.5 goto :jmods_ok
+)
+powershell -NoProfile -Command "$ok=$false; foreach($v in @('21.0.5','25.0.4')){ try { Invoke-WebRequest -UseBasicParsing -Uri \"https://download2.gluonhq.com/openjfx/$v/openjfx-${v}_windows-x64_bin-jmods.zip\" -OutFile 'target\jmods.zip'; if(Test-Path 'target\jmods.zip'){ if((Get-Item 'target\jmods.zip').Length -gt 5MB){ Set-Content -NoNewline target\jmods.version $v; $ok=$true; break } } } catch { Write-Host \"jmods $v failed: $_\" } }; if(-not $ok){ exit 1 }"
+if %errorlevel%==0 goto :jmods_extract
+echo      powershell download failed, trying pwsh (PowerShell 7)...
+where pwsh >nul 2>&1
+if %errorlevel%==0 (
+  pwsh -NoProfile -Command "$ok=$false; foreach($v in @('21.0.5','25.0.4')){ try { Invoke-WebRequest -Uri \"https://download2.gluonhq.com/openjfx/$v/openjfx-${v}_windows-x64_bin-jmods.zip\" -OutFile 'target\jmods.zip' -SkipCertificateCheck -TimeoutSec 30; if(Test-Path 'target\jmods.zip'){ if((Get-Item 'target\jmods.zip').Length -gt 5MB){ Set-Content -NoNewline target\jmods.version $v; $ok=$true; break } } } catch { Write-Host \"jmods $v pwsh failed: $_\" } }; if(-not $ok){ exit 1 }"
+  if %errorlevel%==0 goto :jmods_extract
+)
+goto :jmods_manual
+:jmods_extract
 powershell -NoProfile -Command "Expand-Archive -Force 'target\jmods.zip' 'target\jmods'"
 if errorlevel 1 goto :jmods_manual
 set /p JFX_VERSION=<target\jmods.version
@@ -74,14 +91,21 @@ jpackage --verbose --type app-image --input target\pkg --main-jar vetms-%APP_VER
 if errorlevel 1 goto :fail
 
 echo [6/7] Making sure Inno Setup 6 is available (installs via winget once)...
+:: Check all known locations + PATH before trying to install
 if exist "%INNO_DIR%\ISCC.exe" goto :inno_ok
+if exist "%INNO_DIR2%\ISCC.exe" set "INNO_DIR=%INNO_DIR2%" & goto :inno_ok
 where ISCC.exe >nul 2>&1
-if errorlevel 1 goto :inno_install
-goto :inno_ok
+if %errorlevel%==0 goto :inno_ok
+:: Try to locate via winget list / registry
+for /f "delims=" %%i in ('where ISCC.exe 2^>nul') do set "INNO_DIR=%%~dpi" & goto :inno_ok
 :inno_install
 echo      Inno Setup not found - installing it now (needs admin once)...
 winget install --id JRSoftware.InnoSetup -e --silent --accept-package-agreements --accept-source-agreements
+:: re-check both locations after install
 if exist "%INNO_DIR%\ISCC.exe" goto :inno_ok
+if exist "%INNO_DIR2%\ISCC.exe" set "INNO_DIR=%INNO_DIR2%" & goto :inno_ok
+where ISCC.exe >nul 2>&1
+if %errorlevel%==0 goto :inno_ok
 echo.
 echo  !!! Inno Setup could not be installed automatically.
 echo      Install it once from https://jrsoftware.org/isdl.php (Inno Setup 6)
