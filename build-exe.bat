@@ -4,7 +4,7 @@ REM  VetCustomerManager - build the ready-to-use Windows .exe installer
 REM  Online-only edition (Supabase + local SQLite cache, no clinic server)
 REM
 REM  What you need ONCE on your Windows PC:
-REM    1. JDK 25 LTS (https://adoptium.net -> Temurin 25) with JAVA_HOME set
+REM    1. JDK 21 LTS (https://adoptium.net -> Temurin 21) with JAVA_HOME set
 REM    2. Apache Maven (https://maven.apache.org) - "mvn" on the PATH
 REM       (Inno Setup installs itself automatically below, via winget)
 REM
@@ -18,7 +18,7 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 set APP_VERSION=4.0.0
-set JFX_VERSION=25.0.4
+set JFX_VERSION=21.0.5
 set INNO_DIR=C:\Program Files (x86)\Inno Setup 6
 
 echo [0/7] CLEAN slate - wiping previous build output (target, dist)...
@@ -41,8 +41,8 @@ powershell -NoProfile -Command "$b='https://download2.dynamsoft.com/maven/dbr/ja
 if exist target\pkg\dbr.jar echo      Dynamsoft jar bundled - premium engine ready.
 if not exist target\pkg\dbr.jar echo      Dynamsoft jar skipped - built-in engine will still scan fine.
 
-echo [3/7] Downloading JavaFX jmods (LTS 25.0.4, fallback 26.0.1)...
-powershell -NoProfile -Command "$ok=$false; foreach($v in @('25.0.4','26.0.1')){ try { Invoke-WebRequest -Uri \"https://download2.gluonhq.com/openjfx/$v/openjfx-${v}_windows-x64_bin-jmods.zip\" -OutFile 'target\jmods.zip'; if((Get-Item 'target\jmods.zip').Length -gt 5MB){ Set-Content -NoNewline target\jmods.version $v; $ok=$true; break } } catch {} }; if(-not $ok){ exit 1 }"
+echo [3/7] Downloading JavaFX jmods (LTS 21.0.5, fallback 25.0.4)...
+powershell -NoProfile -Command "$ok=$false; foreach($v in @('21.0.5','25.0.4')){ try { Invoke-WebRequest -Uri \"https://download2.gluonhq.com/openjfx/$v/openjfx-${v}_windows-x64_bin-jmods.zip\" -OutFile 'target\jmods.zip'; if((Get-Item 'target\jmods.zip').Length -gt 5MB){ Set-Content -NoNewline target\jmods.version $v; $ok=$true; break } } catch {} }; if(-not $ok){ exit 1 }"
 if errorlevel 1 goto :jmods_manual
 powershell -NoProfile -Command "Expand-Archive -Force 'target\jmods.zip' 'target\jmods'"
 if errorlevel 1 goto :jmods_manual
@@ -56,9 +56,9 @@ if exist target\jmods\javafx-jmods-%JFX_VERSION% goto :jmods_ok
 echo.
 echo  !!! Could not download/extract the JavaFX jmods automatically.
 echo      1. Go to https://gluonhq.com/products/javafx/ and download the
-echo         jmods for JavaFX 25.0.4 - Windows x64
+echo         jmods for JavaFX 21.0.5 - Windows x64
 echo      2. Extract the zip so this folder exists:
-echo         %CD%\target\jmods\javafx-jmods-25.0.4
+echo         %CD%\target\jmods\javafx-jmods-21.0.5
 echo      3. Re-run build-exe.bat
 goto :fail
 
@@ -70,7 +70,7 @@ jlink --module-path "target\jmods\javafx-jmods-%JFX_VERSION%;%JAVA_HOME%\jmods" 
 if errorlevel 1 goto :fail
 
 echo [5/7] Assembling the app folder with jpackage...
-jpackage --verbose --type app-image --input target\pkg --main-jar vetms-%APP_VERSION%.jar --main-class dev.parent.Launcher --runtime-image target\runtime --name VetCustomerManager --app-version %APP_VERSION% --vendor "AAB" --description "Veterinary Customer Manager - Supabase online edition" --icon packaging\icon.ico --java-options "-Dfile.encoding=UTF-8" --dest dist\app-image
+jpackage --verbose --type app-image --input target\pkg --main-jar vetms-%APP_VERSION%.jar --main-class dev.parent.Launcher --runtime-image target\runtime --name VetCustomerManager --app-version %APP_VERSION% --vendor "AAB" --description "Veterinary Customer Manager - Supabase online edition" --icon packaging\icon.ico --java-options "-Dfile.encoding=UTF-8 --enable-native-access=ALL-UNNAMED" --dest dist\app-image
 if errorlevel 1 goto :fail
 
 echo [6/7] Making sure Inno Setup 6 is available (installs via winget once)...

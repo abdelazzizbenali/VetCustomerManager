@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "25"
+          java-version: "21"
           cache: maven
       - name: Maven package (frontend)
         run: mvn -B -ntp -DskipTests package
@@ -33,7 +33,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "25"
+          java-version: "21"
           cache: maven
 
       - name: Maven package + collect runtime jars
@@ -65,11 +65,11 @@ jobs:
           }
           if (-not $ok) { Write-Host "DBR JAR UNAVAILABLE - installer will use the free engine only" }
 
-      - name: Download JavaFX jmods (Windows, LTS 25 with 26 fallback)
+      - name: Download JavaFX jmods (Windows, LTS 21 with 25 fallback)
         shell: pwsh
         run: |
           $got = $null
-          foreach ($v in @("25.0.4", "26.0.1")) {
+          foreach ($v in @("21.0.5", "25.0.4")) {
             try {
               Invoke-WebRequest -Uri "https://download2.gluonhq.com/openjfx/$v/openjfx-${v}_windows-x64_bin-jmods.zip" -OutFile jmods.zip
               if ((Get-Item jmods.zip).Length -gt 5MB) { $got = $v; break }
@@ -113,7 +113,7 @@ jobs:
             --vendor "AAB" `
             --description "Veterinary Customer Manager (Supabase online edition)" `
             --icon packaging\icon.ico `
-            --java-options "-Dfile.encoding=UTF-8" `
+            --java-options "-Dfile.encoding=UTF-8 --enable-native-access=ALL-UNNAMED" `
             --dest dist\app-image
           ISCC.exe packaging\installer.iss
           Get-ChildItem dist\installer
