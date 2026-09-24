@@ -49,21 +49,53 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
-          $base = "https://download2.dynamsoft.com/maven/dbr/jar/com/dynamsoft/dbr"
+          $baseHttps = "https://download2.dynamsoft.com/maven/dbr/jar/com/dynamsoft/dbr"
+          $baseHttp  = "http://download2.dynamsoft.com/maven/dbr/jar/com/dynamsoft/dbr"
           $versions = @()
-          try {
-            $x = [xml](Invoke-WebRequest -UseBasicParsing "$base/maven-metadata.xml").Content
-            $versions += @($x.metadata.versioning.versions.version | Where-Object { $_ -and $_ -notmatch "SNAPSHOT|alpha|beta|rc" } | Select-Object -Last 2)
-          } catch { Write-Host "metadata unreadable: $_" }
-          $versions += @("9.6.40.1", "9.6.40", "9.6.0")
-          $ok = $false
-          foreach ($v in ($versions | Where-Object { $_ })) {
+          foreach ($base in @($baseHttps, $baseHttp)) {
             try {
-              Invoke-WebRequest -UseBasicParsing "$base/$v/dbr-$v.jar" -OutFile "target\pkg\dbr.jar"
-              if ((Get-Item "target\pkg\dbr.jar").Length -gt 500KB) { $ok = $true; Write-Host "Dynamsoft jar bundled (version $v)"; break }
-            } catch { Write-Host "version $v not downloadable" }
+              $x = [xml](Invoke-WebRequest -UseBasicParsing "$base/maven-metadata.xml" -SkipCertificateCheck -TimeoutSec 15).Content
+              $cand = @($x.metadata.versioning.versions.version | Where-Object { $_ -and $_ -notmatch "SNAPSHOT|alpha|beta|rc" } | Select-Object -Last 2)
+              if ($cand.Count -gt 0) { $versions += $cand; break }
+            } catch { Write-Host "metadata unreadable from $base : $($_.Exception.Message)" }
           }
-          if (-not $ok) { Write-Host "DBR JAR UNAVAILABLE - installer will use the free engine only" }
+          $versions += @("9.6.40.1", "9.6.40", "9.6.0", "11.6.3000")
+          $versions = $versions | Where-Object { $_ } | Select-Object -Unique
+          $ok = $false
+          foreach ($v in $versions) {
+            foreach ($base in @($baseHttps, $baseHttp)) {
+              try {
+                Write-Host "Trying Dynamsoft $v from $base ..."
+                Invoke-WebRequest -UseBasicParsing "$base/$v/dbr-$v.jar" -OutFile "target\pkg\dbr.jar" -SkipCertificateCheck -TimeoutSec 20
+                if ((Get-Item "target\pkg\dbr.jar").Length -gt 400KB) {
+                  $ok = $true; Write-Host "Dynamsoft jar bundled (version $v from $base, $((Get-Item target\pkg\dbr.jar).Length) bytes)"; break
+                } else { Write-Host "  $v too small: $((Get-Item target\pkg\dbr.jar).Length) bytes" }
+              } catch { Write-Host "  $v not downloadable from $base : $($_.Exception.Message)" }
+            }
+            if ($ok) { break }
+          }
+          if (-not $ok) {
+            Write-Host "Direct download failed -> trying Maven dependency:get ..."
+            try {
+              mvn -B -ntp dependency:get "-Dartifact=com.dynamsoft:dbr:9.6.40" "-DremoteRepositories=dbr::default::https://download2.dynamsoft.com/maven/dbr/jar" "-Dtransitive=false" 2>&1 | Out-String | Write-Host
+              $local = "$env:USERPROFILE\.m2\repository\com\dynamsoft\dbr\9.6.40\dbr-9.6.40.jar"
+              if (Test-Path $local) {
+                Copy-Item $local "target\pkg\dbr.jar" -Force; $ok = $true
+                Write-Host "Maven fetched $local -> copied ($((Get-Item target\pkg\dbr.jar).Length) bytes)"
+              } else {
+                $found = Get-ChildItem "$env:USERPROFILE\.m2\repository\com\dynamsoft\dbr" -Recurse -Filter "dbr-*.jar" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+                if ($found) { Copy-Item $found.FullName "target\pkg\dbr.jar" -Force; $ok=$true; Write-Host "Found $($found.FullName) ($($found.Length) bytes) -> copied" }
+              }
+            } catch { Write-Host "Maven fetch failed: $_" }
+          }
+          if (Test-Path "target\pkg\dbr.jar") {
+            Write-Host "dbr.jar present: $((Get-Item target\pkg\dbr.jar).Length) bytes"
+            Get-ChildItem target\pkg\*.jar | ForEach-Object { Write-Host "  pkg: $($_.Name) $($_.Length)" }
+            if (-not (Get-ChildItem target\pkg\webcam-capture-*.jar -ErrorAction SilentlyContinue)) { Write-Host "WARNING: webcam-capture jar NOT in pkg — fallback camera will not work" }
+          }
+          if (-not $ok -or -not (Test-Path "target\pkg\dbr.jar")) {
+            Write-Host "DBR JAR UNAVAILABLE - installer will use the free ZXing engine only (saving a key will show 'not bundled' but scanning still works)"
+          }
 
       - name: Download JavaFX jmods (Windows, LTS 21 with 25 fallback)
         shell: pwsh

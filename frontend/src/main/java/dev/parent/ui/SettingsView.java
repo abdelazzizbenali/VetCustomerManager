@@ -57,8 +57,7 @@ final class SettingsView extends MainWindow.BaseView {
     private final CheckBox showPreview = new CheckBox(
             "Show the live camera preview on Daily Usage (turn off for a lighter screen)");
     private final TextField dynamsoftKey = new TextField();
-    private final Label cameraEngineInfo = new Label("Built-in Java camera driver "
-            + "(the only engine now - no external programs to leave running behind)");
+    private final Label cameraEngineInfo = new Label("Hybrid camera: OpenCV (DSHOW/MSMF) with webcam-capture fallback — no external programs to leave running behind");
     private final Label serverScanStatus = new Label("Camera: checking...");
     private final ComboBox<String> serialPort = new ComboBox<>();
     private final ComboBox<Integer> serialBaud = new ComboBox<>(
@@ -227,7 +226,10 @@ final class SettingsView extends MainWindow.BaseView {
         grid.add(rowLabel("Camera engine"), 0, 5);
         grid.add(cameraEngineInfo, 1, 5);
         grid.add(rowLabel("Camera status"), 0, 6);
-        grid.add(serverScanStatus, 1, 6);
+        HBox camRow = new HBox(10, serverScanStatus, Ui.toolButton("Diagnose", "refresh.png", this::diagnoseCamera));
+        camRow.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(serverScanStatus, Priority.ALWAYS);
+        grid.add(camRow, 1, 6);
         serialPort.setEditable(true);
         serialPort.setPrefWidth(160);
         serialPort.setPromptText("none");
@@ -284,11 +286,13 @@ final class SettingsView extends MainWindow.BaseView {
                 }
                 if (!jarPresent) {
                     dev.parent.scanner.DynamsoftLocal.reinit();
-                    msg = "Key saved.\n\nPremium engine not bundled in this installer \u2013 "
-                            + "the free engine (ZXing) stays active and scans perfectly.\n\n"
-                            + "To enable Dynamsoft premium: rebuild the installer after "
-                            + "the Dynamsoft jar is downloaded (see README) \u2013 your saved key "
-                            + "will activate automatically.";
+                    msg = "Key saved \u2013 free engine active and scanning normally.\n\n"
+                            + "Premium (Dynamsoft) was not bundled in this installer "
+                            + "(download was unavailable when it was built). Your key is SAFE and saved.\n\n"
+                            + "How to activate premium later:\n"
+                            + "1) Rebuild the installer on a PC with internet (build-exe.bat auto-downloads the jar), or\n"
+                            + "2) Drop the Dynamsoft jar (dbr-9.6.40.jar renamed to dbr.jar) into the app's install folder next to vetms-*.jar and restart.\n\n"
+                            + "Until then ZXing decodes every barcode/QR just fine.";
                 } else {
                     dev.parent.scanner.DynamsoftLocal.reinit();
                     boolean live = dev.parent.scanner.DynamsoftLocal.isAvailable();
@@ -308,6 +312,39 @@ final class SettingsView extends MainWindow.BaseView {
             javafx.application.Platform.runLater(
                     () -> FxUtil.info(getWindow(), "License key", finalMsg));
             refreshDataLater();
+        });
+    }
+
+    private void diagnoseCamera() {
+        Thread.ofVirtual().name("vetms-camera-diag").start(() -> {
+            String diag;
+            try {
+                boolean probe = dev.parent.scanner.CameraScanService.probeAny();
+                String detail = dev.parent.scanner.CameraScanService.engineDetail();
+                String probeDetail = dev.parent.scanner.CameraScanService.lastProbeDetail();
+                String nativeErr = dev.parent.scanner.CameraScanService.nativesError();
+                String status = dev.parent.scanner.CameraScanService.get().statusText();
+                boolean running = dev.parent.scanner.CameraScanService.get().running();
+                // also try to list webcam-capture devices directly
+                String webcamList = "";
+                try {
+                    var webcams = com.github.sarxos.webcam.Webcam.getWebcams(1500);
+                    webcamList = webcams == null ? "null" : webcams.size() + " device(s): " + webcams;
+                } catch (Throwable t) { webcamList = "Webcam.getWebcams() failed: " + t.getMessage(); }
+                diag = "Running: " + running + "\nStatus: " + status
+                        + "\nEngine: " + detail
+                        + "\nProbe: " + (probe ? "found" : "none")
+                        + "\nProbe detail: " + probeDetail
+                        + "\nNative error: " + (nativeErr.isBlank() ? "(none)" : nativeErr)
+                        + "\nWebcam-capture list: " + webcamList
+                        + "\n\nTips if 'none':\n"
+                        + "- Windows Settings -> Privacy & security -> Camera -> Let desktop apps access camera = ON\n"
+                        + "- Close Teams / Zoom / Browser that may hold the camera, unplug camera 5s, try again\n"
+                        + "- Try 'Camera always on' OFF then ON, or restart the app\n"
+                        + "- Check Device Manager -> Cameras has no yellow !";
+            } catch (Throwable t) { diag = "Diagnose failed: " + t.getMessage(); }
+            String f = diag;
+            javafx.application.Platform.runLater(() -> FxUtil.info(getWindow(), "Camera diagnose", f));
         });
     }
 

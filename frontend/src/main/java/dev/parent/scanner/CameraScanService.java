@@ -1,5 +1,6 @@
 package dev.parent.scanner;
 
+import com.github.sarxos.webcam.Webcam;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.BinaryBitmap;
 import com.google.zxing.DecodeHintType;
@@ -8,12 +9,14 @@ import com.google.zxing.MultiFormatReader;
 import com.google.zxing.NotFoundException;
 import com.google.zxing.client.j2se.BufferedImageLuminanceSource;
 import com.google.zxing.common.HybridBinarizer;
+import dev.parent.config.Log;
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacpp.Loader;
 import org.bytedeco.opencv.opencv_core.Mat;
 import org.bytedeco.opencv.opencv_videoio.VideoCapture;
 
 import javax.imageio.ImageIO;
+import java.awt.Dimension;
 import java.awt.image.BufferedImage;
 import java.awt.image.WritableRaster;
 import java.io.ByteArrayInputStream;
@@ -23,147 +26,107 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.bytedeco.opencv.global.opencv_imgcodecs.imencode;
+import static org.bytedeco.opencv.global.opencv_videoio.CAP_ANY;
 import static org.bytedeco.opencv.global.opencv_videoio.CAP_DSHOW;
+import static org.bytedeco.opencv.global.opencv_videoio.CAP_MSMF;
 import static org.bytedeco.opencv.global.opencv_videoio.CAP_PROP_FRAME_HEIGHT;
 import static org.bytedeco.opencv.global.opencv_videoio.CAP_PROP_FRAME_WIDTH;
 
 /**
- * The built-in camera scanner.
+ * Built-in camera scanner — single JVM, no helper process.
  *
- * <p>Engine: OpenCV's DirectShow backend (org.bytedeco preset bundles) when
- * available, otherwise falls back to webcam-capture (sarxos, pure Java).
- * One loop thread reads frames, JPEG-encodes them for the live preview and
- * hands the same pixels to the decode chain {@code Dynamsoft (licensed) ->
- * ZXing global -> ZXing hybrid}. All decode engines run in-process.</p>
+ * <p>Preferred engine is OpenCV (bytedeco) — tries DSHOW, MSMF, then ANY for each
+ * index 0..3 so Windows cameras that only expose MSMF are still found.
+ * If OpenCV natives cannot even initialize (old JDK25 + missing --enable-native-access,
+ * or mismatched openblas natives) the service transparently falls back to
+ * sarxos webcam-capture (pure Java, BridJ/DSHOW). One loop thread does preview
+ * JPEGs + decode chain Dynamsoft → ZXing.</p>
  */
 public final class CameraScanService {
 
     @FunctionalInterface
-    public interface StatusListener {
-        void onStatus(boolean running, String message);
-    }
-
+    public interface StatusListener { void onStatus(boolean running, String message); }
     @FunctionalInterface
-    public interface FrameListener {
-        void onFrame(byte[] jpeg);
-    }
-
+    public interface FrameListener { void onFrame(byte[] jpeg); }
     @FunctionalInterface
-    public interface CodeListener {
-        void onCode(String code, String engine);
-    }
+    public interface CodeListener { void onCode(String code, String engine); }
 
     private static final long PREVIEW_INTERVAL_MS = 140;
     private static final long SAME_CODE_COOLDOWN_MS = 2500;
-    private static final int MAX_CAMERAS_TO_TRY = 3;
+    private static final int MAX_CAMERAS_TO_TRY = 4;
 
     private static volatile boolean nativesOk;
     private static volatile String nativesError = "";
-    private static volatile boolean useOpenCv = true; // false -> fallback to webcam-capture
+    private static volatile boolean useOpenCv = true;
     private static volatile String engineDetail = "OpenCV";
+    private static volatile String lastProbeDetail = "";
 
-    /** The one-time load of the native libraries (idempotent). */
     public static synchronized boolean ensureNatives() {
-        if (nativesOk) {
-            return true;
-        }
-        // First, try OpenCV (bytedeco) – the preferred engine.
-        // On some JVMs (especially JDK 25+ without --enable-native-access, or missing openblas natives)
-        // the static initializer for opencv_core can fail with:
-        //   Could not initialize class org.bytedeco.opencv.global.opencv_core
-        //   Could not initialize class org.bytedeco.openblas.global.openblas_nolapack
-        // We handle that gracefully and fall back to webcam-capture.
+        if (nativesOk) return true;
         Throwable firstError = null;
-        // Try OpenCV with openblas disabled (lighter, avoids openblas_nolapack on JDK25)
         try {
             if (System.getProperty("org.bytedeco.openblas.load") == null) {
                 System.setProperty("org.bytedeco.openblas.load", "none");
             }
-        } catch (Throwable ignored) {
-        }
+        } catch (Throwable ignored) {}
         try {
             Loader.load(org.bytedeco.opencv.global.opencv_videoio.class);
             Loader.load(org.bytedeco.opencv.global.opencv_imgcodecs.class);
-            try {
-                Loader.load(org.bytedeco.opencv.global.opencv_core.class);
-            } catch (Throwable ignored) {
-            }
-            // Verify that Mat class can actually be initialized (triggers static init)
-            // If this throws, we will fall back.
-            try {
-                Class.forName("org.bytedeco.opencv.opencv_core$Mat");
-            } catch (Throwable t) {
-                throw t;
-            }
-            nativesOk = true;
-            nativesError = "";
-            useOpenCv = true;
-            engineDetail = "OpenCV";
+            try { Loader.load(org.bytedeco.opencv.global.opencv_core.class); } catch (Throwable ignored) {}
+            Class.forName("org.bytedeco.opencv.opencv_core$Mat");
+            nativesOk = true; nativesError = ""; useOpenCv = true; engineDetail = "OpenCV";
             return true;
         } catch (Throwable t) {
             firstError = t;
-            // Log for diagnostics
-            String msg = t.toString();
-            if (t.getCause() != null) msg += " -> " + t.getCause().toString();
-            System.err.println("[Camera] OpenCV natives failed: " + msg);
+            String m = t.toString(); if (t.getCause()!=null) m += " -> " + t.getCause();
+            System.err.println("[Camera] OpenCV natives failed: " + m);
+            Log.warn("OpenCV init failed: " + m);
         }
-        // Fallback: try classic core load with openblas enabled (if natives are actually present)
         try {
             System.clearProperty("org.bytedeco.openblas.load");
             Loader.load(org.bytedeco.opencv.global.opencv_core.class);
-            // Verify again
             Class.forName("org.bytedeco.opencv.opencv_core$Mat");
-            nativesOk = true;
-            nativesError = "";
-            useOpenCv = true;
-            engineDetail = "OpenCV";
+            nativesOk = true; nativesError = ""; useOpenCv = true; engineDetail = "OpenCV";
             return true;
         } catch (Throwable t) {
-            String msg2 = t.toString();
-            if (t.getCause() != null) msg2 += " -> " + t.getCause().toString();
-            System.err.println("[Camera] OpenCV fallback load failed: " + msg2);
-            // Don't return yet, try webcam-capture fallback
+            String m = t.toString(); if (t.getCause()!=null) m += " -> "+t.getCause();
+            System.err.println("[Camera] OpenCV fallback load failed: " + m);
         }
-        // Last resort: try webcam-capture (sarxos) – pure Java, no native OpenCV needed.
+        // webcam-capture fallback — verify BridJ can enumerate
         try {
-            Class<?> webcamClass = Class.forName("com.github.sarxos.webcam.Webcam");
-            // Touch the class to ensure it loads
-            webcamClass.getMethod("getWebcams");
-            nativesOk = true;
-            nativesError = "";
+            // touch slf4j + webcam classes
+            Class.forName("com.github.sarxos.webcam.Webcam");
+            // trigger discovery — may throw BridJ UnsatisfiedLinkError on restricted JVMs
+            List<Webcam> w = Webcam.getWebcams();
+            // if we get here, the driver itself loaded (even if list empty, that's OK for ensure)
+            nativesOk = true; nativesError = "";
             useOpenCv = false;
-            engineDetail = "Webcam-Capture (fallback, OpenCV unavailable: " + (firstError != null ? firstError.getMessage() : "unknown") + ")";
-            System.out.println("[Camera] Using webcam-capture fallback (OpenCV unavailable)");
+            String hint = firstError != null ? String.valueOf(firstError.getMessage()) : "unknown";
+            engineDetail = "Webcam-Capture (fallback, OpenCV unavailable)";
+            lastProbeDetail = "OpenCV failed: " + hint + " | webcam-capture driver loaded, " + w.size() + " device(s) enumerated";
+            System.out.println("[Camera] Using webcam-capture fallback (" + lastProbeDetail + ")");
+            Log.info("Camera fallback active: " + lastProbeDetail);
             return true;
         } catch (Throwable t) {
-            String msg = firstError != null ? firstError.toString() : "Unknown";
-            if (t != null) msg += " | Webcam fallback also failed: " + t.toString();
-            nativesError = msg;
-            // Keep the original OpenCV error as the primary message for the user, but mention fallback
-            if (nativesError.contains("opencv_core") || nativesError.contains("openblas_nolapack")) {
-                nativesError = "Could not initialize OpenCV natives (" + nativesError + "). "
-                        + "This often happens on JDK 25 without --enable-native-access or with a mismatched JavaFX/JDK version. "
-                        + "The app will try the fallback camera driver on next start, or please run with Java 21. "
-                        + "Raw: " + msg;
+            String m = firstError != null ? firstError.toString() : "Unknown";
+            m += " | Webcam fallback also failed: " + t + (t.getCause()!=null?" -> "+t.getCause():"");
+            nativesError = m;
+            if (m.contains("opencv_core") || m.contains("openblas_nolapack")) {
+                nativesError = "Could not initialize OpenCV natives. This often happens on JDK 25 without --enable-native-access or with a mismatched JavaFX/JDK. "
+                        + "Raw: " + m;
             }
+            System.err.println("[Camera] No engine available: " + nativesError);
             return false;
         }
     }
 
-    public static String nativesError() {
-        return nativesError;
-    }
-
-    public static String engineDetail() {
-        return engineDetail;
-    }
+    public static String nativesError() { return nativesError; }
+    public static String engineDetail() { return engineDetail; }
+    public static String lastProbeDetail() { return lastProbeDetail; }
 
     private static CameraScanService instance;
-
     public static synchronized CameraScanService get() {
-        if (instance == null) {
-            instance = new CameraScanService();
-        }
+        if (instance == null) instance = new CameraScanService();
         return instance;
     }
 
@@ -174,472 +137,296 @@ public final class CameraScanService {
     private volatile boolean wantRun;
     private volatile boolean running;
     private volatile Thread worker;
-    private volatile VideoCapture camera; // OpenCV path
-    private volatile Object webcamFallback; // Webcam object for fallback path (avoid hard dep)
+    private volatile VideoCapture camera;
+    private volatile Webcam webcamFallback;
     private volatile String statusText = "camera idle";
     private volatile String lastCode = "";
     private volatile long lastCodeAt;
     private volatile String lastEngine = "";
 
-    private CameraScanService() {
-    }
+    private CameraScanService() {}
 
-    // ------------------------------------------------------------- listeners
+    public void addStatusListener(StatusListener l) { statusListeners.add(l); }
+    public void removeStatusListener(StatusListener l) { statusListeners.remove(l); }
+    public void addFrameListener(FrameListener l) { frameListeners.add(l); }
+    public void removeFrameListener(FrameListener l) { frameListeners.remove(l); }
+    public void addCodeListener(CodeListener l) { codeListeners.add(l); }
+    public void removeCodeListener(CodeListener l) { codeListeners.remove(l); }
 
-    public void addStatusListener(StatusListener l) {
-        statusListeners.add(l);
-    }
-
-    public void removeStatusListener(StatusListener l) {
-        statusListeners.remove(l);
-    }
-
-    public void addFrameListener(FrameListener l) {
-        frameListeners.add(l);
-    }
-
-    public void removeFrameListener(FrameListener l) {
-        frameListeners.remove(l);
-    }
-
-    public void addCodeListener(CodeListener l) {
-        codeListeners.add(l);
-    }
-
-    public void removeCodeListener(CodeListener l) {
-        codeListeners.remove(l);
-    }
-
-    // -------------------------------------------------------------- lifecycle
-
-    /** Starts the pipeline if the user enabled "camera always on". Idempotent. */
     public synchronized void start() {
-        if (worker != null) {
-            return;
-        }
+        if (worker != null) return;
         wantRun = true;
         worker = Thread.ofVirtual().name("vetms-camera").start(this::loop);
     }
-
     public synchronized void stop() {
         wantRun = false;
         Thread w = worker;
-        if (w != null) {
-            w.interrupt();
-        }
+        if (w != null) w.interrupt();
         worker = null;
         closeCamera();
         running = false;
         setStatus("camera stopped");
     }
+    public boolean running() { return running; }
+    public String statusText() { return statusText; }
+    public String lastEngine() { return lastEngine; }
 
-    public boolean running() {
-        return running;
-    }
-
-    public String statusText() {
-        return statusText;
-    }
-
-    public String lastEngine() {
-        return lastEngine;
-    }
-
-    /** Any camera device visible at all? (splash check) */
     public static boolean probeAny() {
-        if (!ensureNatives()) {
-            return false;
-        }
+        if (!ensureNatives()) return false;
+        StringBuilder diag = new StringBuilder();
         if (useOpenCv) {
             for (int i = 0; i < MAX_CAMERAS_TO_TRY; i++) {
-                VideoCapture probe = null;
-                try {
-                    probe = new VideoCapture(i, CAP_DSHOW);
-                    if (probe.isOpened()) {
-                        probe.release();
-                        return true;
-                    }
-                } catch (Throwable ignored) {
-                    // try the next index
-                } finally {
-                    if (probe != null) {
-                        try {
+                for (int backend : new int[]{CAP_DSHOW, CAP_MSMF, CAP_ANY}) {
+                    VideoCapture probe = null;
+                    try {
+                        probe = new VideoCapture(i, backend);
+                        if (probe.isOpened()) {
                             probe.release();
-                        } catch (Throwable ignored) {
+                            lastProbeDetail = "OpenCV index " + i + " via " + backendName(backend) + " is available";
+                            return true;
+                        } else {
+                            diag.append("idx").append(i).append("/").append(backendName(backend)).append(" closed; ");
                         }
-                    }
+                    } catch (Throwable t) {
+                        diag.append("idx").append(i).append("/").append(backendName(backend)).append(" err:").append(t.getMessage()).append("; ");
+                    } finally { if (probe!=null) try{probe.release();}catch(Throwable ignored){} }
                 }
             }
-            // OpenCV probe failed, but fallback webcam might still be available
-            return probeWebcamFallback();
+            lastProbeDetail = diag.toString();
+            // try webcam fallback probe before giving up
+            if (probeWebcamFallbackDetailed(diag)) return true;
+            return false;
         } else {
             return probeWebcamFallback();
         }
     }
 
     private static boolean probeWebcamFallback() {
+        StringBuilder sb = new StringBuilder();
+        boolean r = probeWebcamFallbackDetailed(sb);
+        if (!r) lastProbeDetail = sb.toString();
+        return r;
+    }
+    private static boolean probeWebcamFallbackDetailed(StringBuilder out) {
         try {
-            Class<?> webcamClass = Class.forName("com.github.sarxos.webcam.Webcam");
-            java.lang.reflect.Method getWebcams = webcamClass.getMethod("getWebcams");
-            @SuppressWarnings("unchecked")
-            java.util.List<?> webcams = (java.util.List<?>) getWebcams.invoke(null);
-            return webcams != null && !webcams.isEmpty();
-        } catch (Throwable ignored) {
+            List<Webcam> webcams = Webcam.getWebcams(2000);
+            if (webcams != null && !webcams.isEmpty()) {
+                out.append("webcam-capture found ").append(webcams.size()).append(" device(s)");
+                lastProbeDetail = out.toString();
+                return true;
+            }
+            // also try default with timeout
+            Webcam d = Webcam.getDefault(1000);
+            if (d != null) {
+                out.append("webcam-capture default=").append(d.getName());
+                lastProbeDetail = out.toString();
+                return true;
+            }
+            out.append("webcam-capture enumerated 0 devices");
+            return false;
+        } catch (Throwable t) {
+            out.append("webcam-capture probe failed: ").append(t).append(t.getCause()!=null?" -> "+t.getCause():"");
+            Log.warn("webcam probe failed: " + t);
             return false;
         }
     }
 
-    // ----------------------------------------------------------------- loops
-
     private void loop() {
         if (!ensureNatives()) {
             setStatus("camera engine missing: " + nativesError);
-            cameraCleanupFromInside();
-            return;
+            cameraCleanupFromInside(); return;
         }
-        if (useOpenCv) {
-            loopOpenCv();
-        } else {
-            loopWebcamFallback();
-        }
+        if (useOpenCv) loopOpenCv(); else loopWebcamFallback();
     }
 
     private void loopOpenCv() {
         VideoCapture cam = openAnyCameraOpenCv();
         if (cam == null) {
-            // Try fallback if OpenCV can't open any camera but webcam-capture might
+            String diag = lastProbeDetail;
             if (probeWebcamFallback()) {
-                useOpenCv = false;
-                engineDetail = "Webcam-Capture (fallback)";
-                loopWebcamFallback();
-                return;
+                useOpenCv = false; engineDetail = "Webcam-Capture (fallback)";
+                Log.info("OpenCV found no camera (" + diag + ") — switching to webcam-capture");
+                loopWebcamFallback(); return;
             }
-            setStatus("no camera found - plug one in and press the camera button again");
-            cameraCleanupFromInside();
-            return;
+            setStatus("no camera found - plug one in and press the camera button again"
+                    + (diag.isBlank() ? "" : " | " + diag)
+                    + " | Tip: check Windows Privacy -> Camera is ON for desktop apps, and no other app (Teams/Zoom/browser) is using the camera.");
+            cameraCleanupFromInside(); return;
         }
-        this.camera = cam;
-        running = true;
-        setStatus("camera live (" + engineDetail + ") - hold a barcode in front of it");
-
-        Mat frame = new Mat();
-        BytePointer jpeg = new BytePointer();
-        long lastPreview = 0;
-        long lastEmptyLog = 0;
-
+        this.camera = cam; running = true;
+        setStatus("camera live (" + engineDetail + " via " + lastProbeDetail + ") - hold a barcode in front of it");
+        Mat frame = new Mat(); long lastPreview=0, lastEmptyLog=0;
         try {
             while (wantRun && !Thread.currentThread().isInterrupted()) {
-                if (!cam.grab()) {
-                    sleepQuietly(30);
-                }
+                if (!cam.grab()) sleepQuietly(30);
                 if (!cam.retrieve(frame) || frame.empty()) {
                     long now = System.currentTimeMillis();
-                    if (now - lastEmptyLog > 5000) {
-                        lastEmptyLog = now;
-                        setStatus("camera is on but sending no picture - is another app using it?");
-                    }
-                    sleepQuietly(60);
-                    continue;
+                    if (now - lastEmptyLog > 5000) { lastEmptyLog=now; setStatus("camera is on but sending no picture - is another app using it? ("+lastProbeDetail+")"); }
+                    sleepQuietly(60); continue;
                 }
-
                 long now = System.currentTimeMillis();
                 if (now - lastPreview >= PREVIEW_INTERVAL_MS && !frameListeners.isEmpty()) {
                     lastPreview = now;
-                    jpeg = new BytePointer();
+                    BytePointer jpeg = new BytePointer();
                     if (imencode(".jpg", frame, jpeg)) {
-                        byte[] bytes = new byte[(int) jpeg.limit()];
-                        jpeg.get(bytes);
-                        for (FrameListener l : frameListeners) {
-                            try {
-                                l.onFrame(bytes);
-                            } catch (Throwable ignored) {
-                            }
-                        }
+                        byte[] bytes = new byte[(int) jpeg.limit()]; jpeg.get(bytes);
+                        for (FrameListener l : frameListeners) try{ l.onFrame(bytes);}catch(Throwable ignored){}
                     }
                 }
-
-                decodeMat(frame);
-                sleepQuietly(90);
+                decodeMat(frame); sleepQuietly(90);
             }
         } catch (Throwable t) {
-            // If OpenCV loop crashes (e.g., native error), try fallback on next start
-            String msg = t.getMessage();
-            if (msg != null && msg.contains("opencv_core")) {
-                useOpenCv = false;
-                engineDetail = "Webcam-Capture (fallback after OpenCV crash)";
-                System.err.println("[Camera] OpenCV loop crashed, switching to fallback: " + t);
-            }
+            String m = String.valueOf(t.getMessage());
+            if (m.contains("opencv_core")) { useOpenCv=false; engineDetail="Webcam-Capture (fallback after OpenCV crash)"; System.err.println("[Camera] OpenCV loop crashed, switching: "+t); }
             setStatus("camera stopped: " + t.getMessage());
-        } finally {
-            closeCamera();
-            running = false;
-            if (wantRun) {
-                setStatus("camera stopped unexpectedly");
-            }
-            cameraCleanupFromInside();
-        }
+            Log.warn("Camera loop crash: " + t, t);
+        } finally { closeCamera(); running=false; if(wantRun) setStatus("camera stopped unexpectedly"); cameraCleanupFromInside(); }
     }
 
     private void loopWebcamFallback() {
-        Object webcam = openAnyCameraWebcam();
+        Webcam webcam = openAnyCameraWebcam();
         if (webcam == null) {
-            setStatus("no camera found - plug one in and press the camera button again (fallback driver also found nothing)");
-            cameraCleanupFromInside();
-            return;
+            String diag = lastProbeDetail.isBlank()? "" : " | "+lastProbeDetail;
+            setStatus("no camera found - plug one in and press the camera button again (fallback driver also found nothing)"
+                    + diag + " | Tip: check Windows Settings -> Privacy -> Camera, and close Teams/Zoom/browser that may hold the camera. If you have a camera, try unplugging it for 5s.");
+            cameraCleanupFromInside(); return;
         }
-        this.webcamFallback = webcam;
-        running = true;
-        setStatus("camera live (" + engineDetail + ") - hold a barcode in front of it");
-
-        long lastPreview = 0;
+        this.webcamFallback = webcam; running=true;
+        setStatus("camera live (" + engineDetail + " ~ " + webcam.getName() + ") - hold a barcode in front of it");
+        long lastPreview=0;
         try {
-            java.lang.reflect.Method getImage = webcam.getClass().getMethod("getImage");
-            java.lang.reflect.Method isOpen = webcam.getClass().getMethod("isOpen");
             while (wantRun && !Thread.currentThread().isInterrupted()) {
-                Boolean open = (Boolean) isOpen.invoke(webcam);
-                if (!open) {
-                    sleepQuietly(100);
-                    continue;
-                }
-                BufferedImage image = (BufferedImage) getImage.invoke(webcam);
-                if (image == null) {
-                    sleepQuietly(60);
-                    continue;
-                }
+                if (!webcam.isOpen()) { sleepQuietly(100); continue; }
+                BufferedImage image = webcam.getImage();
+                if (image == null) { sleepQuietly(60); continue; }
                 long now = System.currentTimeMillis();
                 if (now - lastPreview >= PREVIEW_INTERVAL_MS && !frameListeners.isEmpty()) {
                     lastPreview = now;
-                    try {
-                        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-                        ImageIO.write(image, "jpg", baos);
-                        byte[] bytes = baos.toByteArray();
-                        for (FrameListener l : frameListeners) {
-                            try {
-                                l.onFrame(bytes);
-                            } catch (Throwable ignored) {
-                            }
-                        }
-                    } catch (Throwable ignored) {
-                    }
+                    try { java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream(); ImageIO.write(image, "jpg", baos); byte[] b = baos.toByteArray(); for(FrameListener l:frameListeners) try{l.onFrame(b);}catch(Throwable ignored){} } catch(Throwable ignored){}
                 }
-                decodeImage(image);
-                sleepQuietly(90);
+                decodeImage(image); sleepQuietly(90);
             }
-        } catch (Throwable t) {
-            setStatus("camera stopped (fallback): " + t.getMessage());
-        } finally {
-            closeCameraFallback();
-            running = false;
-            if (wantRun) {
-                setStatus("camera stopped unexpectedly");
-            }
-            cameraCleanupFromInside();
-        }
+        } catch (Throwable t) { setStatus("camera stopped (fallback): "+t.getMessage()); Log.warn("fallback loop: "+t, t); }
+        finally { closeCameraFallback(); running=false; if(wantRun) setStatus("camera stopped unexpectedly"); cameraCleanupFromInside(); }
     }
 
     private VideoCapture openAnyCameraOpenCv() {
-        for (int i = 0; i < MAX_CAMERAS_TO_TRY; i++) {
-            VideoCapture cam = null;
-            try {
-                cam = new VideoCapture(i, CAP_DSHOW);
-                if (cam.isOpened()) {
-                    cam.set(CAP_PROP_FRAME_WIDTH, 1280);
-                    cam.set(CAP_PROP_FRAME_HEIGHT, 720);
-                    setStatus("camera " + i + " found (" + engineDetail + ")");
-                    return cam;
-                }
-            } catch (Throwable ignored) {
-            }
-            if (cam != null) {
+        lastProbeDetail = "";
+        for (int i=0;i<MAX_CAMERAS_TO_TRY;i++) {
+            for (int backend : new int[]{CAP_DSHOW, CAP_MSMF, CAP_ANY}) {
+                VideoCapture cam = null;
                 try {
-                    cam.release();
-                } catch (Throwable ignored) {
-                }
+                    cam = new VideoCapture(i, backend);
+                    if (cam.isOpened()) {
+                        cam.set(CAP_PROP_FRAME_WIDTH, 1280);
+                        cam.set(CAP_PROP_FRAME_HEIGHT, 720);
+                        lastProbeDetail = "camera " + i + " via " + backendName(backend);
+                        setStatus(lastProbeDetail + " found ("+engineDetail+")");
+                        return cam;
+                    }
+                } catch (Throwable t) { lastProbeDetail = "idx"+i+"/"+backendName(backend)+" err: "+t.getMessage(); }
+                if (cam!=null) try{cam.release();}catch(Throwable ignored){}
             }
         }
+        lastProbeDetail += " | tried " + MAX_CAMERAS_TO_TRY + " indices x DSHOW/MSMF/ANY";
         return null;
     }
 
-    private Object openAnyCameraWebcam() {
+    private Webcam openAnyCameraWebcam() {
         try {
-            Class<?> webcamClass = Class.forName("com.github.sarxos.webcam.Webcam");
-            java.lang.reflect.Method getDefault = webcamClass.getMethod("getDefault");
-            java.lang.reflect.Method getWebcams = webcamClass.getMethod("getWebcams");
-            java.lang.reflect.Method open = webcamClass.getMethod("open");
-            java.lang.reflect.Method isOpen = webcamClass.getMethod("isOpen");
-            @SuppressWarnings("unchecked")
-            java.util.List<?> webcams = (java.util.List<?>) getWebcams.invoke(null);
-            if (webcams == null || webcams.isEmpty()) return null;
-            for (Object cam : webcams) {
+            List<Webcam> webcams = Webcam.getWebcams(3000);
+            if (webcams==null || webcams.isEmpty()) {
+                lastProbeDetail = "Webcam.getWebcams() returned 0 devices";
+                // try default as last resort
                 try {
-                    Boolean opened = (Boolean) isOpen.invoke(cam);
-                    if (!opened) {
-                        open.invoke(cam);
+                    Webcam def = Webcam.getDefault(1500);
+                    if (def != null) {
+                        prepareAndOpen(def);
+                        if (def.isOpen()) { lastProbeDetail = "default webcam "+def.getName(); return def; }
                     }
-                    // Set view size if possible
-                    try {
-                        java.lang.reflect.Method setViewSize = webcamClass.getMethod("setViewSize", java.awt.Dimension.class);
-                        setViewSize.invoke(cam, new java.awt.Dimension(1280, 720));
-                    } catch (Throwable ignored) {
-                    }
-                    return cam;
-                } catch (Throwable ignored) {
+                } catch (Throwable t2) { lastProbeDetail += " | default also failed: "+t2.getMessage(); }
+                return null;
+            }
+            for (Webcam cam : webcams) {
+                try {
+                    prepareAndOpen(cam);
+                    if (cam.isOpen()) { lastProbeDetail = "webcam "+cam.getName(); return cam; }
+                    lastProbeDetail = "webcam "+cam.getName()+" failed to open";
+                } catch (Throwable t) {
+                    lastProbeDetail = "webcam "+cam.getName()+" err: "+t.getMessage();
+                    Log.warn("open webcam "+cam.getName()+" failed", t);
                 }
             }
-            // Fallback to default
-            Object def = getDefault.invoke(null);
-            if (def != null) {
-                try {
-                    Boolean opened = (Boolean) isOpen.invoke(def);
-                    if (!opened) open.invoke(def);
-                    return def;
-                } catch (Throwable ignored) {
-                }
-            }
-        } catch (Throwable ignored) {
-        }
-        return null;
-    }
-
-    private void cameraCleanupFromInside() {
-        synchronized (this) {
-            if (Thread.currentThread() == worker) {
-                worker = null;
-            }
-        }
-    }
-
-    private synchronized void closeCamera() {
-        VideoCapture cam = camera;
-        camera = null;
-        if (cam != null) {
-            try {
-                cam.release();
-            } catch (Throwable ignored) {
-            }
-        }
-        closeCameraFallback();
-    }
-
-    private synchronized void closeCameraFallback() {
-        Object cam = webcamFallback;
-        webcamFallback = null;
-        if (cam != null) {
-            try {
-                cam.getClass().getMethod("close").invoke(cam);
-            } catch (Throwable ignored) {
-            }
-        }
-    }
-
-    private void setStatus(String text) {
-        statusText = text;
-        for (StatusListener l : statusListeners) {
-            try {
-                l.onStatus(running, text);
-            } catch (Throwable ignored) {
-            }
-        }
-    }
-
-    private static void sleepQuietly(long ms) {
-        try {
-            Thread.sleep(ms);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    // ------------------------------------------------------------------ decode
-
-    private void decodeMat(Mat frame) {
-        BufferedImage image = toImage(frame);
-        decodeImage(image);
-    }
-
-    private void decodeImage(BufferedImage image) {
-        String text;
-        String engine;
-
-        text = tryDynamsoft(image);
-        if (text != null) {
-            engine = "Dynamsoft";
-        } else {
-            text = zxing(image, false);
-            if (text != null) {
-                engine = "ZXing";
-            } else {
-                text = zxing(image, true);
-                engine = "ZXing";
-            }
-        }
-
-        if (text == null || text.isBlank()) {
-            return;
-        }
-        long now = System.currentTimeMillis();
-        if (text.equals(lastCode) && now - lastCodeAt < SAME_CODE_COOLDOWN_MS) {
-            return;
-        }
-        lastCode = text;
-        lastCodeAt = now;
-        lastEngine = engine;
-        for (CodeListener l : codeListeners) {
-            try {
-                l.onCode(text, engine);
-            } catch (Throwable ignored) {
-            }
-        }
-    }
-
-    private static String tryDynamsoft(BufferedImage image) {
-        try {
-            return DynamsoftLocal.decode(image);
+            // fallback to default
+            try { Webcam def = Webcam.getDefault(1500); if(def!=null){ prepareAndOpen(def); if(def.isOpen()) return def; } } catch(Throwable ignored){}
         } catch (Throwable t) {
-            return null;
+            lastProbeDetail = "webcam-capture failed: "+t.getMessage()+(t.getCause()!=null?" -> "+t.getCause():"");
+            Log.warn("openAnyCameraWebcam failed", t);
         }
+        return null;
     }
 
-    /** Code 39/128, EAN-8/13, UPC-A/E, QR on the original BGR frame. */
-    private static String zxing(BufferedImage image, boolean hybrid) {
+    private static void prepareAndOpen(Webcam cam) {
+        if (cam.isOpen()) return;
+        // setViewSize must be before open; pick a supported size
         try {
-            MultiFormatReader reader = new MultiFormatReader();
-            Map<DecodeHintType, Object> hints = new EnumMap<>(DecodeHintType.class);
+            Dimension want = new Dimension(1280,720);
+            Dimension[] sizes = cam.getViewSizes();
+            boolean supported = false;
+            if (sizes!=null) for(Dimension d: sizes) if(d.equals(want)) {supported=true; break;}
+            if (supported) cam.setViewSize(want);
+            else if (sizes!=null && sizes.length>0) {
+                // pick largest <= 1280, else first
+                Dimension best = sizes[0];
+                for(Dimension s: sizes) if(s.width<=1280 && s.width>best.width) best=s;
+                cam.setViewSize(best);
+            } else cam.setViewSize(want);
+        } catch (Throwable ignored) {}
+        cam.open();
+    }
+
+    private static String backendName(int b) {
+        if (b==CAP_DSHOW) return "DSHOW";
+        if (b==CAP_MSMF) return "MSMF";
+        if (b==CAP_ANY) return "ANY";
+        return "backend#"+b;
+    }
+
+    private void cameraCleanupFromInside() { synchronized(this){ if(Thread.currentThread()==worker) worker=null; } }
+    private synchronized void closeCamera() { VideoCapture cam=camera; camera=null; if(cam!=null) try{cam.release();}catch(Throwable ignored){} closeCameraFallback(); }
+    private synchronized void closeCameraFallback() { Webcam cam=webcamFallback; webcamFallback=null; if(cam!=null) try{cam.close();}catch(Throwable ignored){} }
+
+    private void setStatus(String text) { statusText=text; for(StatusListener l:statusListeners) try{l.onStatus(running,text);}catch(Throwable ignored){} }
+    private static void sleepQuietly(long ms){ try{Thread.sleep(ms);}catch(InterruptedException e){Thread.currentThread().interrupt();} }
+
+    private void decodeMat(Mat frame){ BufferedImage image=toImage(frame); decodeImage(image); }
+    private void decodeImage(BufferedImage image){
+        String text = tryDynamsoft(image); String engine = text!=null?"Dynamsoft":null;
+        if(text==null){ text=zxing(image,false); engine="ZXing"; if(text==null){ text=zxing(image,true); engine="ZXing"; } }
+        if(text==null || text.isBlank()) return;
+        long now=System.currentTimeMillis();
+        if(text.equals(lastCode) && now - lastCodeAt < SAME_CODE_COOLDOWN_MS) return;
+        lastCode=text; lastCodeAt=now; lastEngine=engine;
+        for(CodeListener l:codeListeners) try{l.onCode(text,engine);}catch(Throwable ignored){}
+    }
+    private static String tryDynamsoft(BufferedImage image){ try{ return DynamsoftLocal.decode(image);}catch(Throwable t){return null;} }
+    private static String zxing(BufferedImage image, boolean hybrid){
+        try{
+            MultiFormatReader reader=new MultiFormatReader();
+            Map<DecodeHintType,Object> hints=new EnumMap<>(DecodeHintType.class);
             hints.put(DecodeHintType.TRY_HARDER, Boolean.TRUE);
-            hints.put(DecodeHintType.POSSIBLE_FORMATS, List.of(
-                    BarcodeFormat.CODE_39, BarcodeFormat.CODE_128,
-                    BarcodeFormat.EAN_8, BarcodeFormat.EAN_13,
-                    BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.QR_CODE));
-            LuminanceSource source = new BufferedImageLuminanceSource(image);
-            BinaryBitmap bitmap = hybrid
-                    ? new BinaryBitmap(new HybridBinarizer(source))
-                    : new BinaryBitmap(new com.google.zxing.common.GlobalHistogramBinarizer(source));
-            return reader.decode(bitmap, hints).getText();
-        } catch (NotFoundException e) {
-            return null;
-        } catch (Throwable t) {
-            return null;
-        }
+            hints.put(DecodeHintType.POSSIBLE_FORMATS, List.of(BarcodeFormat.CODE_39, BarcodeFormat.CODE_128, BarcodeFormat.EAN_8, BarcodeFormat.EAN_13, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.QR_CODE));
+            LuminanceSource source=new BufferedImageLuminanceSource(image);
+            BinaryBitmap bitmap=hybrid? new BinaryBitmap(new HybridBinarizer(source)) : new BinaryBitmap(new com.google.zxing.common.GlobalHistogramBinarizer(source));
+            return reader.decode(bitmap,hints).getText();
+        } catch(NotFoundException e){ return null; } catch(Throwable t){ return null; }
     }
-
-    /** BGR Mat -> BufferedImage without ImageIO round trips. */
-    private static BufferedImage toImage(Mat frame) {
-        int w = frame.cols();
-        int h = frame.rows();
-        BufferedImage image = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
-        WritableRaster raster = image.getRaster();
-        byte[] row = new byte[w * 3];
-        for (int y = 0; y < h; y++) {
-            frame.ptr(y, 0).get(row);
-            raster.setDataElements(0, y, w, 1, row);
-        }
+    private static BufferedImage toImage(Mat frame){
+        int w=frame.cols(), h=frame.rows();
+        BufferedImage image=new BufferedImage(w,h,BufferedImage.TYPE_3BYTE_BGR);
+        WritableRaster raster=image.getRaster(); byte[] row=new byte[w*3];
+        for(int y=0;y<h;y++){ frame.ptr(y,0).get(row); raster.setDataElements(0,y,w,1,row); }
         return image;
     }
-
-    // ----------------------------------------------------------------- misc
-
-    /** Preview consumers turn a JPEG payload back into a picture here. */
-    public static BufferedImage jpegToImage(byte[] jpeg) throws Exception {
-        return ImageIO.read(new ByteArrayInputStream(jpeg));
-    }
+    public static BufferedImage jpegToImage(byte[] jpeg) throws Exception { return ImageIO.read(new ByteArrayInputStream(jpeg)); }
 }
