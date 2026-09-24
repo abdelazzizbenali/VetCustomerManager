@@ -68,7 +68,7 @@ public final class CameraScanService {
             return true;
         }
         try {
-            Loader.load(org.bytedeco.opencv.global.opencv_javaio.class);
+            Loader.load(org.bytedeco.opencv.global.opencv_core.class);
             nativesOk = true;
             nativesError = "";
             return true;
