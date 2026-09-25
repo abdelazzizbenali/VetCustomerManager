@@ -27,8 +27,12 @@ import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Slider;
 import javafx.scene.control.Spinner;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.image.ImageView;
+import javafx.scene.image.Image;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -64,6 +68,37 @@ final class SettingsView extends MainWindow.BaseView {
             javafx.collections.FXCollections.observableArrayList(1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200));
     private final TextField gap = new TextField();
     private final Label issues = new Label();
+
+    // ---- Camera Lab (Gemini) ----
+    private final Slider labBrightness = new Slider(-100, 100, 0);
+    private final Slider labContrast = new Slider(50, 250, 100);
+    private final Slider labSaturation = new Slider(0, 200, 100);
+    private final Slider labSharpness = new Slider(0, 200, 0);
+    private final Slider labRoiSize = new Slider(40, 95, 75);
+    private final Label labBrightnessVal = new Label("0");
+    private final Label labContrastVal = new Label("100%");
+    private final Label labSaturationVal = new Label("100%");
+    private final Label labSharpnessVal = new Label("0%");
+    private final Label labRoiSizeVal = new Label("75%");
+    private final CheckBox labGrayscale = new CheckBox("Grayscale");
+    private final CheckBox labInvert = new CheckBox("Invert");
+    private final CheckBox labRoiEnabled = new CheckBox("ROI — crop central band (Gemini: thin horizontal for EAN)");
+    private final CheckBox labTryHarder = new CheckBox("TRY_HARDER (spends more time on blurry frames)");
+    private final CheckBox labDownscale = new CheckBox("Downscale to 640px (faster on 1080p)");
+    private final TextField labFormats = new TextField();
+    private final ImageView labPreview = new ImageView();
+    private final Label labPreviewStatus = new Label("Lab stopped — press Start preview");
+    private final TextField labLastCode = new TextField();
+    private final Label labLastEngine = new Label("");
+    private final Label labLabInfo = new Label();
+    private volatile boolean labActive = false;
+    private volatile int labBrightnessV = 0, labContrastV = 100, labSaturationV = 100, labSharpnessV = 0, labRoiSizeV = 75;
+    private volatile boolean labGrayscaleV = false, labInvertV = false, labRoiEnabledV = false, labTryHarderV = true, labDownscaleV = true;
+    private volatile String labFormatsV = "CODE_128,CODE_39,EAN_13,EAN_8,UPC_A,UPC_E,QR_CODE";
+    private dev.parent.scanner.CameraScanService.FrameListener labFrameListener;
+    private dev.parent.scanner.CameraScanService.CodeListener labCodeListener;
+    private long labLastPreviewMs = 0;
+    private String labLastCodeStr = ""; private long labLastCodeAt = 0;
 
     SettingsView() {
         urlField.setText(cfg.supabaseUrl());
@@ -107,6 +142,7 @@ final class SettingsView extends MainWindow.BaseView {
                 buildSupabaseSection(),
                 buildSyncSection(),
                 buildScannerSection(),
+                buildCameraLabSection(),
                 buildDataSection(),
                 buildAboutSection());
         ScrollPane scroll = new ScrollPane(root);
@@ -262,6 +298,125 @@ final class SettingsView extends MainWindow.BaseView {
         return box;
     }
 
+    private VBox buildCameraLabSection() {
+        VBox box = section("Camera Lab — low-quality webcam tuning (live)");
+        Label desc = new Label("Gemini tips: reduce to 640px, boost contrast, ROI crop, TRY_HARDER. "
+                + "Move sliders — preview updates instantly. Point a barcode at the camera — if it decodes, the number appears below with a 'found' sound so you can compare to the real barcode.");
+        desc.getStyleClass().add("hint");
+        desc.setWrapText(true);
+
+        // Init from AppConfig
+        labBrightness.setValue(cfg.cameraFilterBrightness());
+        labContrast.setValue(cfg.cameraFilterContrast());
+        labSaturation.setValue(cfg.cameraFilterSaturation());
+        labSharpness.setValue(cfg.cameraFilterSharpness());
+        labRoiSize.setValue(cfg.cameraFilterRoiSize());
+        labGrayscale.setSelected(cfg.cameraFilterGrayscale());
+        labInvert.setSelected(cfg.cameraFilterInvert());
+        labRoiEnabled.setSelected(cfg.cameraFilterRoiEnabled());
+        labTryHarder.setSelected(cfg.cameraFilterTryHarder());
+        labDownscale.setSelected(cfg.cameraFilterDownscale());
+        labFormats.setText(cfg.cameraFilterFormats());
+        labFormats.setPromptText("CODE_128,QR_CODE,...");
+        labFormats.setPrefWidth(320);
+        // Value labels
+        labBrightnessVal.setText(String.valueOf((int) labBrightness.getValue()));
+        labContrastVal.setText((int) labContrast.getValue() + "%");
+        labSaturationVal.setText((int) labSaturation.getValue() + "%");
+        labSharpnessVal.setText((int) labSharpness.getValue() + "%");
+        labRoiSizeVal.setText((int) labRoiSize.getValue() + "%");
+        // Volatiles
+        labBrightnessV = (int) labBrightness.getValue();
+        labContrastV = (int) labContrast.getValue();
+        labSaturationV = (int) labSaturation.getValue();
+        labSharpnessV = (int) labSharpness.getValue();
+        labRoiSizeV = (int) labRoiSize.getValue();
+        labGrayscaleV = labGrayscale.isSelected();
+        labInvertV = labInvert.isSelected();
+        labRoiEnabledV = labRoiEnabled.isSelected();
+        labTryHarderV = labTryHarder.isSelected();
+        labDownscaleV = labDownscale.isSelected();
+        labFormatsV = labFormats.getText();
+
+        // Sliders setup
+        for (Slider s : new Slider[]{labBrightness, labContrast, labSaturation, labSharpness, labRoiSize}) {
+            s.setShowTickMarks(false);
+            s.setShowTickLabels(false);
+            s.setPrefWidth(220);
+        }
+        labBrightness.setMajorTickUnit(50); labBrightness.setBlockIncrement(5);
+        labContrast.setMajorTickUnit(50); labContrast.setBlockIncrement(5);
+        labSaturation.setMajorTickUnit(50); labSaturation.setBlockIncrement(5);
+        labSharpness.setMajorTickUnit(50); labSharpness.setBlockIncrement(5);
+        labRoiSize.setMajorTickUnit(10); labRoiSize.setBlockIncrement(5);
+
+        // Listeners update volatiles + labels live
+        labBrightness.valueProperty().addListener((o, oldV, v) -> { labBrightnessV = v.intValue(); labBrightnessVal.setText(String.valueOf(labBrightnessV)); });
+        labContrast.valueProperty().addListener((o, oldV, v) -> { labContrastV = v.intValue(); labContrastVal.setText(labContrastV + "%"); });
+        labSaturation.valueProperty().addListener((o, oldV, v) -> { labSaturationV = v.intValue(); labSaturationVal.setText(labSaturationV + "%"); });
+        labSharpness.valueProperty().addListener((o, oldV, v) -> { labSharpnessV = v.intValue(); labSharpnessVal.setText(labSharpnessV + "%"); });
+        labRoiSize.valueProperty().addListener((o, oldV, v) -> { labRoiSizeV = v.intValue(); labRoiSizeVal.setText(labRoiSizeV + "%"); });
+        labGrayscale.selectedProperty().addListener((o, oldV, v) -> labGrayscaleV = v);
+        labInvert.selectedProperty().addListener((o, oldV, v) -> labInvertV = v);
+        labRoiEnabled.selectedProperty().addListener((o, oldV, v) -> labRoiEnabledV = v);
+        labTryHarder.selectedProperty().addListener((o, oldV, v) -> labTryHarderV = v);
+        labDownscale.selectedProperty().addListener((o, oldV, v) -> labDownscaleV = v);
+        labFormats.textProperty().addListener((o, oldV, v) -> labFormatsV = v == null ? "" : v.trim());
+
+        GridPane grid = new GridPane();
+        grid.getStyleClass().add("form-grid");
+        grid.setHgap(10); grid.setVgap(8);
+        int r = 0;
+        grid.add(rowLabel("Brightness (-100..100)"), 0, r); grid.add(labBrightness, 1, r); grid.add(labBrightnessVal, 2, r++); 
+        grid.add(rowLabel("Contrast (50..250%)"), 0, r); grid.add(labContrast, 1, r); grid.add(labContrastVal, 2, r++);
+        grid.add(rowLabel("Saturation (0..200%)"), 0, r); grid.add(labSaturation, 1, r); grid.add(labSaturationVal, 2, r++);
+        grid.add(rowLabel("Netteté / Sharpness (0..200%)"), 0, r); grid.add(labSharpness, 1, r); grid.add(labSharpnessVal, 2, r++);
+        grid.add(rowLabel("ROI size (40..95%)"), 0, r); grid.add(labRoiSize, 1, r); grid.add(labRoiSizeVal, 2, r++);
+        grid.add(rowLabel("Options"), 0, r); grid.add(new VBox(6, labGrayscale, labInvert, labRoiEnabled, labTryHarder, labDownscale), 1, r++);
+        grid.add(rowLabel("Formats (ZXing)"), 0, r); grid.add(labFormats, 1, r++);
+
+        // Preview area
+        labPreview.setFitWidth(420);
+        labPreview.setFitHeight(320);
+        labPreview.setPreserveRatio(true);
+        labPreview.setStyle("-fx-background-color: black; -fx-border-color: #455A64; -fx-border-width: 1;");
+        labPreviewStatus.getStyleClass().add("hint");
+        labPreviewStatus.setWrapText(true);
+        labLastCode.setPromptText("Scanned numbers will appear here — compare to the real barcode");
+        labLastCode.setPrefWidth(320);
+        labLastCode.setEditable(false);
+        labLastEngine.getStyleClass().add("hint");
+        labLabInfo.getStyleClass().add("hint");
+        labLabInfo.setWrapText(true);
+        labLabInfo.setText("Tip: for EAN-13 on shiny/cylindrical bottles, align the barcode horizontally inside the green ROI band — then only that thin strip is sent to ZXing (ultra-fast).");
+
+        VBox previewBox = new VBox(6);
+        previewBox.setAlignment(Pos.TOP_LEFT);
+        previewBox.getChildren().addAll(new Label("Live preview (with current sliders) + ROI:"), labPreview, labPreviewStatus);
+
+        VBox codeBox = new VBox(6);
+        codeBox.setAlignment(Pos.TOP_LEFT);
+        codeBox.getChildren().addAll(new Label("Last decoded (live test):"), labLastCode, labLastEngine, labLabInfo);
+
+        HBox previewRow = new HBox(16, previewBox, codeBox);
+        previewRow.setAlignment(Pos.TOP_LEFT);
+
+        Button start = Ui.toolButton("Start Lab preview", "camera.png", this::startCameraLab);
+        Button stop = Ui.toolButton("Stop", "cross.png", this::stopCameraLab);
+        Button save = Ui.toolButton("Save tuning to file", "check.png", this::saveCameraLab);
+        save.getStyleClass().add("accent");
+        Button reset = Ui.toolButton("Reset defaults", "refresh.png", this::resetCameraLab);
+        HBox btns = new HBox(10, start, stop, save, reset);
+        btns.setAlignment(Pos.CENTER_LEFT);
+
+        Label hint = new Label("Sliders change the preview instantly. 'Save tuning' writes to config.properties — the main scanner will then use these filters for every scan (decode + preview).");
+        hint.getStyleClass().add("hint");
+        hint.setWrapText(true);
+
+        box.getChildren().addAll(desc, grid, previewRow, btns, hint);
+        return box;
+    }
+
     private void saveDynamsoftKey() {
         String key = dynamsoftKey.getText() == null ? "" : dynamsoftKey.getText().trim();
         cfg.setDynamsoftLicense(key);
@@ -352,6 +507,117 @@ final class SettingsView extends MainWindow.BaseView {
             String f = diag;
             javafx.application.Platform.runLater(() -> FxUtil.info(getWindow(), "Camera diagnose", f));
         });
+    }
+
+    // ---- Camera Lab controls ----
+    private void startCameraLab() {
+        if (labActive) return;
+        labActive = true;
+        labPreviewStatus.setText("Lab running — point a barcode at the camera");
+        labLastCode.setText("");
+        labLastEngine.setText("");
+        // Ensure camera is running (platform thread safe)
+        try { dev.parent.scanner.CameraScanService.get().start(); } catch (Throwable ignored) {}
+        // Frame listener: apply live slider filters and update preview + test-decode
+        labFrameListener = jpeg -> {
+            // Throttle preview to ~10 fps to avoid saturating FX thread
+            long now = System.currentTimeMillis();
+            if (now - labLastPreviewMs < 90) return;
+            labLastPreviewMs = now;
+            Thread.ofVirtual().name("lab-frame").start(() -> {
+                try {
+                    java.awt.image.BufferedImage raw = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(jpeg));
+                    if (raw == null) return;
+                    // Preview with ROI rectangle (what user sees)
+                    java.awt.image.BufferedImage preview = dev.parent.scanner.ImageFilters.applyWithParams(
+                            raw, labBrightnessV, labContrastV, labSaturationV, labSharpnessV,
+                            labGrayscaleV, labInvertV, labDownscaleV, labRoiEnabledV, labRoiSizeV, true);
+                    javafx.scene.image.Image fx = javafx.embed.swing.SwingFXUtils.toFXImage(preview, null);
+                    javafx.application.Platform.runLater(() -> labPreview.setImage(fx));
+                    // Decode with ROI crop (what ZXing will actually see) — single filtered image
+                    java.awt.image.BufferedImage toDecode = dev.parent.scanner.ImageFilters.applyWithParams(
+                            raw, labBrightnessV, labContrastV, labSaturationV, labSharpnessV,
+                            labGrayscaleV, labInvertV, labDownscaleV, labRoiEnabledV, labRoiSizeV, false);
+                    String code = decodeLabImage(toDecode);
+                    if (code != null) {
+                        long cnow = System.currentTimeMillis();
+                        if (!code.equals(labLastCodeStr) || cnow - labLastCodeAt > 1500) {
+                            labLastCodeStr = code; labLastCodeAt = cnow;
+                            String fcode = code;
+                            javafx.application.Platform.runLater(() -> {
+                                labLastCode.setText(fcode);
+                                labLastEngine.setText("Found via " + (labTryHarderV ? "TRY_HARDER" : "standard") + " — compare to real barcode");
+                            });
+                            dev.parent.util.SoundPlayer.playFound();
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            });
+        };
+        labCodeListener = (code, engine) -> {
+            // Also listen to global scanner (if lab filters are not used, this shows global decode)
+            // But lab frame decode is more accurate for tuning, so we keep both
+            javafx.application.Platform.runLater(() -> {
+                if (!labLastCode.getText().equals(code)) {
+                    labLastCode.setText(code);
+                    labLastEngine.setText("Global: " + engine);
+                }
+            });
+        };
+        dev.parent.scanner.CameraScanService.get().addFrameListener(labFrameListener);
+        dev.parent.scanner.CameraScanService.get().addCodeListener(labCodeListener);
+        // Also hook HID wedge for completeness
+        dev.parent.scanner.ScannerService.beginExclusiveCapture(code -> {
+            if (labActive) javafx.application.Platform.runLater(() -> { labLastCode.setText(code); labLastEngine.setText("Wedge"); dev.parent.util.SoundPlayer.playFound(); });
+        });
+    }
+
+    private String decodeLabImage(java.awt.image.BufferedImage img) {
+        try {
+            com.google.zxing.MultiFormatReader reader = new com.google.zxing.MultiFormatReader();
+            java.util.Map<com.google.zxing.DecodeHintType,Object> hints = new java.util.EnumMap<>(com.google.zxing.DecodeHintType.class);
+            hints.put(com.google.zxing.DecodeHintType.TRY_HARDER, labTryHarderV);
+            hints.put(com.google.zxing.DecodeHintType.POSSIBLE_FORMATS, dev.parent.scanner.ImageFilters.parseFormats(labFormatsV));
+            com.google.zxing.LuminanceSource src = new com.google.zxing.client.j2se.BufferedImageLuminanceSource(img);
+            // Try Hybrid first (better for low quality), then Global
+            try {
+                return reader.decode(new com.google.zxing.BinaryBitmap(new com.google.zxing.common.HybridBinarizer(src)), hints).getText();
+            } catch (com.google.zxing.NotFoundException e) {
+                return reader.decode(new com.google.zxing.BinaryBitmap(new com.google.zxing.common.GlobalHistogramBinarizer(src)), hints).getText();
+            }
+        } catch (Throwable t) { return null; }
+    }
+
+    private void stopCameraLab() {
+        labActive = false;
+        labPreviewStatus.setText("Lab stopped");
+        if (labFrameListener != null) { dev.parent.scanner.CameraScanService.get().removeFrameListener(labFrameListener); labFrameListener = null; }
+        if (labCodeListener != null) { dev.parent.scanner.CameraScanService.get().removeCodeListener(labCodeListener); labCodeListener = null; }
+        try { dev.parent.scanner.ScannerService.endExclusiveCapture(null); } catch (Throwable ignored) {}
+    }
+
+    private void saveCameraLab() {
+        cfg.setCameraFilterBrightness(labBrightnessV);
+        cfg.setCameraFilterContrast(labContrastV);
+        cfg.setCameraFilterSaturation(labSaturationV);
+        cfg.setCameraFilterSharpness(labSharpnessV);
+        cfg.setCameraFilterGrayscale(labGrayscaleV);
+        cfg.setCameraFilterInvert(labInvertV);
+        cfg.setCameraFilterRoiEnabled(labRoiEnabledV);
+        cfg.setCameraFilterRoiSize(labRoiSizeV);
+        cfg.setCameraFilterTryHarder(labTryHarderV);
+        cfg.setCameraFilterDownscale(labDownscaleV);
+        cfg.setCameraFilterFormats(labFormatsV);
+        cfg.save();
+        javafx.application.Platform.runLater(() -> FxUtil.info(getWindow(), "Camera Lab", "Tuning saved to config.properties\nThe main scanner now uses these filters for every scan.\nRestart the app or toggle 'Camera always on' to apply instantly."));
+    }
+
+    private void resetCameraLab() {
+        labBrightness.setValue(0); labContrast.setValue(100); labSaturation.setValue(100); labSharpness.setValue(0); labRoiSize.setValue(75);
+        labGrayscale.setSelected(false); labInvert.setSelected(false); labRoiEnabled.setSelected(false); labTryHarder.setSelected(true); labDownscale.setSelected(true);
+        labFormats.setText("CODE_128,CODE_39,EAN_13,EAN_8,UPC_A,UPC_E,QR_CODE");
+        // volatiles will update via listeners
+        labPreviewStatus.setText("Reset to defaults — press Save to keep");
     }
 
     private void refreshDataLater() {

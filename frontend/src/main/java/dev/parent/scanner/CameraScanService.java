@@ -9,6 +9,7 @@ import com.google.zxing.MultiFormatReader;
 import com.google.zxing.NotFoundException;
 import com.google.zxing.client.j2se.BufferedImageLuminanceSource;
 import com.google.zxing.common.HybridBinarizer;
+import dev.parent.config.AppConfig;
 import dev.parent.config.Log;
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacpp.Loader;
@@ -459,8 +460,11 @@ public final class CameraScanService {
 
     private void decodeMat(Mat frame){ BufferedImage image=toImage(frame); decodeImage(image); }
     private void decodeImage(BufferedImage image){
-        String text = tryDynamsoft(image); String engine = text!=null?"Dynamsoft":null;
-        if(text==null){ text=zxing(image,false); engine="ZXing"; if(text==null){ text=zxing(image,true); engine="ZXing"; } }
+        // Gemini tip: pre-process before decoding (contrast, ROI, downscale) so low-quality webcams succeed
+        BufferedImage filtered = ImageFilters.applyForDecode(image);
+        if (filtered == null) filtered = image;
+        String text = tryDynamsoft(filtered); String engine = text!=null?"Dynamsoft":null;
+        if(text==null){ text=zxing(filtered,false); engine="ZXing"; if(text==null){ text=zxing(filtered,true); engine="ZXing"; } }
         if(text==null || text.isBlank()) return;
         long now=System.currentTimeMillis();
         if(text.equals(lastCode) && now - lastCodeAt < SAME_CODE_COOLDOWN_MS) return;
@@ -472,12 +476,19 @@ public final class CameraScanService {
         try{
             MultiFormatReader reader=new MultiFormatReader();
             Map<DecodeHintType,Object> hints=new EnumMap<>(DecodeHintType.class);
-            hints.put(DecodeHintType.TRY_HARDER, Boolean.TRUE);
-            hints.put(DecodeHintType.POSSIBLE_FORMATS, List.of(BarcodeFormat.CODE_39, BarcodeFormat.CODE_128, BarcodeFormat.EAN_8, BarcodeFormat.EAN_13, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.QR_CODE));
+            hints.put(DecodeHintType.TRY_HARDER, AppConfig.get().cameraFilterTryHarder());
+            hints.put(DecodeHintType.POSSIBLE_FORMATS, ImageFilters.parseFormats(AppConfig.get().cameraFilterFormats()));
             LuminanceSource source=new BufferedImageLuminanceSource(image);
             BinaryBitmap bitmap=hybrid? new BinaryBitmap(new HybridBinarizer(source)) : new BinaryBitmap(new com.google.zxing.common.GlobalHistogramBinarizer(source));
             return reader.decode(bitmap,hints).getText();
         } catch(NotFoundException e){ return null; } catch(Throwable t){ return null; }
+    }
+
+    private static boolean hasActiveFilters() {
+        AppConfig c = AppConfig.get();
+        return c.cameraFilterBrightness()!=0 || c.cameraFilterContrast()!=100 || c.cameraFilterSaturation()!=100
+                || c.cameraFilterSharpness()!=0 || c.cameraFilterGrayscale() || c.cameraFilterInvert()
+                || c.cameraFilterDownscale() || c.cameraFilterRoiEnabled();
     }
     private static BufferedImage toImage(Mat frame){
         int w=frame.cols(), h=frame.rows();

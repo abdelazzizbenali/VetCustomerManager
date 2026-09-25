@@ -33,6 +33,19 @@ public final class AppConfig {
     public static final String CAMERA_PREVIEW = "scanner.camera.preview";
     public static final String DYNAMSOFT_LICENSE = "scanner.dynamsoft.license";
 
+    // Camera Lab — low-quality webcam tuning (Gemini tips: contrast, ROI, TRY_HARDER, downscale)
+    public static final String CAMERA_FILTER_BRIGHTNESS = "camera.filter.brightness";
+    public static final String CAMERA_FILTER_CONTRAST = "camera.filter.contrast";
+    public static final String CAMERA_FILTER_SATURATION = "camera.filter.saturation";
+    public static final String CAMERA_FILTER_SHARPNESS = "camera.filter.sharpness";
+    public static final String CAMERA_FILTER_GRAYSCALE = "camera.filter.grayscale";
+    public static final String CAMERA_FILTER_INVERT = "camera.filter.invert";
+    public static final String CAMERA_FILTER_ROI_ENABLED = "camera.filter.roi.enabled";
+    public static final String CAMERA_FILTER_ROI_SIZE = "camera.filter.roi.size";
+    public static final String CAMERA_FILTER_TRY_HARDER = "camera.filter.tryHarder";
+    public static final String CAMERA_FILTER_DOWNSCALE = "camera.filter.downscale";
+    public static final String CAMERA_FILTER_FORMATS = "camera.filter.formats";
+
     public static final String NOTIFY_EXPIRY_DAYS = "notify.expiry.days";
 
     private final Properties props = new Properties();
@@ -50,6 +63,18 @@ public final class AppConfig {
         props.setProperty(CAMERA_ALWAYS_ON, "true");
         props.setProperty(CAMERA_PROVIDER, "java");
         props.setProperty(CAMERA_PREVIEW, "true");
+        // Camera Lab defaults (Gemini: reduce resolution, boost contrast, ROI)
+        props.setProperty(CAMERA_FILTER_BRIGHTNESS, "0");
+        props.setProperty(CAMERA_FILTER_CONTRAST, "100");
+        props.setProperty(CAMERA_FILTER_SATURATION, "100");
+        props.setProperty(CAMERA_FILTER_SHARPNESS, "0");
+        props.setProperty(CAMERA_FILTER_GRAYSCALE, "false");
+        props.setProperty(CAMERA_FILTER_INVERT, "false");
+        props.setProperty(CAMERA_FILTER_ROI_ENABLED, "false");
+        props.setProperty(CAMERA_FILTER_ROI_SIZE, "75");
+        props.setProperty(CAMERA_FILTER_TRY_HARDER, "true");
+        props.setProperty(CAMERA_FILTER_DOWNSCALE, "true");
+        props.setProperty(CAMERA_FILTER_FORMATS, "CODE_128,CODE_39,EAN_13,EAN_8,UPC_A,UPC_E,QR_CODE");
         // owner's premium barcode license (built-in default; Settings can override)
         props.setProperty(DYNAMSOFT_LICENSE,
                 "t0087YQEAAGL0FN6YdrvxUDrNFmM9hzMQUt4IsGDSrJ4KXCJNPhJGNBTl62CUjEYunLTqG5stfWf9bBq8Cwo7OBU7QMR9TrEz/GD6R5O7GXhvljFJRXRZUUpZ");
@@ -195,6 +220,41 @@ public final class AppConfig {
     public synchronized void setCameraEnabled(boolean v) {
         props.setProperty(CAMERA_SERVICE_ENABLED, Boolean.toString(v));
     }
+
+    // ---- Camera Lab filters --------------------------------------------------
+
+    public synchronized int cameraFilterBrightness() { return getInt(CAMERA_FILTER_BRIGHTNESS, 0); }
+    public synchronized void setCameraFilterBrightness(int v) { props.setProperty(CAMERA_FILTER_BRIGHTNESS, Integer.toString(Math.max(-100, Math.min(100, v)))); }
+
+    public synchronized int cameraFilterContrast() { return getInt(CAMERA_FILTER_CONTRAST, 100); }
+    public synchronized void setCameraFilterContrast(int v) { props.setProperty(CAMERA_FILTER_CONTRAST, Integer.toString(Math.max(50, Math.min(250, v)))); }
+
+    public synchronized int cameraFilterSaturation() { return getInt(CAMERA_FILTER_SATURATION, 100); }
+    public synchronized void setCameraFilterSaturation(int v) { props.setProperty(CAMERA_FILTER_SATURATION, Integer.toString(Math.max(0, Math.min(200, v)))); }
+
+    public synchronized int cameraFilterSharpness() { return getInt(CAMERA_FILTER_SHARPNESS, 0); }
+    public synchronized void setCameraFilterSharpness(int v) { props.setProperty(CAMERA_FILTER_SHARPNESS, Integer.toString(Math.max(0, Math.min(200, v)))); }
+
+    public synchronized boolean cameraFilterGrayscale() { return getBool(CAMERA_FILTER_GRAYSCALE); }
+    public synchronized void setCameraFilterGrayscale(boolean v) { props.setProperty(CAMERA_FILTER_GRAYSCALE, Boolean.toString(v)); }
+
+    public synchronized boolean cameraFilterInvert() { return getBool(CAMERA_FILTER_INVERT); }
+    public synchronized void setCameraFilterInvert(boolean v) { props.setProperty(CAMERA_FILTER_INVERT, Boolean.toString(v)); }
+
+    public synchronized boolean cameraFilterRoiEnabled() { return getBool(CAMERA_FILTER_ROI_ENABLED); }
+    public synchronized void setCameraFilterRoiEnabled(boolean v) { props.setProperty(CAMERA_FILTER_ROI_ENABLED, Boolean.toString(v)); }
+
+    public synchronized int cameraFilterRoiSize() { return getInt(CAMERA_FILTER_ROI_SIZE, 75); }
+    public synchronized void setCameraFilterRoiSize(int v) { props.setProperty(CAMERA_FILTER_ROI_SIZE, Integer.toString(Math.max(40, Math.min(95, v)))); }
+
+    public synchronized boolean cameraFilterTryHarder() { return Boolean.parseBoolean(props.getProperty(CAMERA_FILTER_TRY_HARDER, "true")); }
+    public synchronized void setCameraFilterTryHarder(boolean v) { props.setProperty(CAMERA_FILTER_TRY_HARDER, Boolean.toString(v)); }
+
+    public synchronized boolean cameraFilterDownscale() { return Boolean.parseBoolean(props.getProperty(CAMERA_FILTER_DOWNSCALE, "true")); }
+    public synchronized void setCameraFilterDownscale(boolean v) { props.setProperty(CAMERA_FILTER_DOWNSCALE, Boolean.toString(v)); }
+
+    public synchronized String cameraFilterFormats() { return props.getProperty(CAMERA_FILTER_FORMATS, "CODE_128,CODE_39,EAN_13,EAN_8,UPC_A,UPC_E,QR_CODE").trim(); }
+    public synchronized void setCameraFilterFormats(String s) { props.setProperty(CAMERA_FILTER_FORMATS, s==null?"":s.trim()); }
 
     // ---- sync ------------------------------------------------------------------
 
