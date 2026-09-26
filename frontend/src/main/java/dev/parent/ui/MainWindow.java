@@ -309,6 +309,11 @@ public final class MainWindow {
         }
         boolean consumed = view != null && view.handleScan(code, found);
         if (!consumed) {
+            // While in Settings (Camera Lab tuning) don't yank the user to Daily Usage
+            // or pop up dialogs — the Lab shows decodes itself.
+            if ("settings".equals(currentKey)) {
+                return;
+            }
             // POS behaviour: every known scan lands in the Daily Usage cart,
             // no matter which screen you were looking at.
             if (found.isPresent() && !"daily".equals(currentKey)) {

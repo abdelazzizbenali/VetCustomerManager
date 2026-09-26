@@ -42,11 +42,29 @@ public final class CameraScanDialog {
             status.setText(running
                     ? "Show the barcode / QR to the camera - reading is automatic"
                     : msg);
+    private volatile long lastPreviewMs;
     private final CameraScanService.FrameListener frameListener = jpeg -> {
-        Image img = new Image(new ByteArrayInputStream(jpeg));
-        if (!img.isError()) {
-            Platform.runLater(() -> preview.setImage(img));
-        }
+        long now = System.currentTimeMillis();
+        if (now - lastPreviewMs < 90) return;
+        lastPreviewMs = now;
+        // Preview with saved filters so dialog matches Daily Usage (whole-program)
+        Thread.ofVirtual().name("dialog-preview").start(() -> {
+            try {
+                java.awt.image.BufferedImage raw = javax.imageio.ImageIO.read(new ByteArrayInputStream(jpeg));
+                if (raw != null) {
+                    java.awt.image.BufferedImage filtered = dev.parent.scanner.ImageFilters.applyForPreview(raw);
+                    Image fx = javafx.embed.swing.SwingFXUtils.toFXImage(filtered, null);
+                    if (fx != null && !fx.isError()) {
+                        Platform.runLater(() -> preview.setImage(fx));
+                        return;
+                    }
+                }
+            } catch (Throwable ignored) {}
+            try {
+                Image img = new Image(new ByteArrayInputStream(jpeg));
+                if (!img.isError()) Platform.runLater(() -> preview.setImage(img));
+            } catch (Throwable ignored2) {}
+        });
     };
 
     public CameraScanDialog(Window owner, Consumer<String> onCode) {

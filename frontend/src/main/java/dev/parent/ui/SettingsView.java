@@ -609,12 +609,12 @@ final class SettingsView extends MainWindow.BaseView {
         cfg.setCameraFilterDownscale(labDownscaleV);
         cfg.setCameraFilterFormats(labFormatsV);
         cfg.save();
-        javafx.application.Platform.runLater(() -> FxUtil.info(getWindow(), "Camera Lab", "Tuning saved to config.properties\nThe main scanner now uses these filters for every scan.\nRestart the app or toggle 'Camera always on' to apply instantly."));
+        javafx.application.Platform.runLater(() -> FxUtil.info(getWindow(), "Camera Lab", "Tuning saved to config.properties\nThe main scanner now uses these filters for every scan — Daily Usage preview and ZXing decode update instantly on the next frame."));
     }
 
     private void resetCameraLab() {
         labBrightness.setValue(0); labContrast.setValue(100); labSaturation.setValue(100); labSharpness.setValue(0); labRoiSize.setValue(75);
-        labGrayscale.setSelected(false); labInvert.setSelected(false); labRoiEnabled.setSelected(false); labTryHarder.setSelected(true); labDownscale.setSelected(true);
+        labGrayscale.setSelected(false); labInvert.setSelected(false); labRoiEnabled.setSelected(false); labTryHarder.setSelected(false); labDownscale.setSelected(false);
         labFormats.setText("CODE_128,CODE_39,EAN_13,EAN_8,UPC_A,UPC_E,QR_CODE");
         // volatiles will update via listeners
         labPreviewStatus.setText("Reset to defaults — press Save to keep");

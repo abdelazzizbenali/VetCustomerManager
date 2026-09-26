@@ -463,16 +463,35 @@ public final class CameraScanService {
         // Gemini tip: pre-process before decoding (contrast, ROI, downscale) so low-quality webcams succeed
         BufferedImage filtered = ImageFilters.applyForDecode(image);
         if (filtered == null) filtered = image;
-        String text = tryDynamsoft(filtered); String engine = text!=null?"Dynamsoft":null;
-        if(text==null){ text=zxing(filtered,false); engine="ZXing"; if(text==null){ text=zxing(filtered,true); engine="ZXing"; } }
+        String text = tryDynamsoft(filtered);
+        String engine = null;
+        if (text != null && isPlausible(text, null)) {
+            engine = "Dynamsoft";
+        } else {
+            text = null;
+            var r1 = zxingWithFormat(filtered, false);
+            if (r1 != null && isPlausible(r1.text, r1.format)) { text = r1.text; engine = "ZXing"; }
+            else {
+                var r2 = zxingWithFormat(filtered, true);
+                if (r2 != null && isPlausible(r2.text, r2.format)) { text = r2.text; engine = "ZXing"; }
+                else text = null;
+            }
+        }
         if(text==null || text.isBlank()) return;
         long now=System.currentTimeMillis();
         if(text.equals(lastCode) && now - lastCodeAt < SAME_CODE_COOLDOWN_MS) return;
         lastCode=text; lastCodeAt=now; lastEngine=engine;
         for(CodeListener l:codeListeners) try{l.onCode(text,engine);}catch(Throwable ignored){}
     }
-    private static String tryDynamsoft(BufferedImage image){ try{ return DynamsoftLocal.decode(image);}catch(Throwable t){return null;} }
-    private static String zxing(BufferedImage image, boolean hybrid){
+    private static String tryDynamsoft(BufferedImage image){
+        try{
+            String t = DynamsoftLocal.decode(image);
+            if (t != null && isPlausible(t, null)) return t;
+            return null;
+        } catch(Throwable t){return null;}
+    }
+    private record ZxResult(String text, BarcodeFormat format) {}
+    private static ZxResult zxingWithFormat(BufferedImage image, boolean hybrid){
         try{
             MultiFormatReader reader=new MultiFormatReader();
             Map<DecodeHintType,Object> hints=new EnumMap<>(DecodeHintType.class);
@@ -480,8 +499,53 @@ public final class CameraScanService {
             hints.put(DecodeHintType.POSSIBLE_FORMATS, ImageFilters.parseFormats(AppConfig.get().cameraFilterFormats()));
             LuminanceSource source=new BufferedImageLuminanceSource(image);
             BinaryBitmap bitmap=hybrid? new BinaryBitmap(new HybridBinarizer(source)) : new BinaryBitmap(new com.google.zxing.common.GlobalHistogramBinarizer(source));
-            return reader.decode(bitmap,hints).getText();
+            var result = reader.decode(bitmap,hints);
+            return new ZxResult(result.getText(), result.getBarcodeFormat());
         } catch(NotFoundException e){ return null; } catch(Throwable t){ return null; }
+    }
+    private static String zxing(BufferedImage image, boolean hybrid){
+        var r = zxingWithFormat(image, hybrid);
+        return r == null ? null : r.text;
+    }
+
+    /** Reject obvious false positives (text OCR as barcode, partial reads, bad checksums). */
+    private static boolean isPlausible(String text, BarcodeFormat fmt) {
+        if (text == null) return false;
+        text = text.trim();
+        if (text.length() < 4 || text.length() > 64) return false;
+        if (text.contains(" ") || text.contains("\n") || text.contains("\t") || text.contains("\r")) return false;
+        if (text.matches("^[a-z]{4,}$")) return false;
+        for (int i = 0; i < text.length(); i++) { char c = text.charAt(i); if (c < 32 || c > 126) return false; }
+        if (fmt == BarcodeFormat.EAN_13) {
+            if (!text.matches("\\d{13}")) return false;
+            return checkEan13(text);
+        }
+        if (fmt == BarcodeFormat.EAN_8) {
+            if (!text.matches("\\d{8}")) return false;
+            return checkEan8(text);
+        }
+        if (fmt == BarcodeFormat.UPC_A) {
+            if (!text.matches("\\d{12}")) return false;
+            return checkUpca(text);
+        }
+        if (fmt == BarcodeFormat.UPC_E) {
+            if (!text.matches("\\d{6,8}")) return false;
+        }
+        if (fmt == null) {
+            if (text.matches("\\d{13}") && !checkEan13(text)) return false;
+            if (text.matches("\\d{8}") && !checkEan8(text)) return false;
+            if (text.matches("\\d{12}") && !checkUpca(text)) return false;
+        }
+        return true;
+    }
+    private static boolean checkEan13(String s) {
+        try { int sum = 0; for (int i = 0; i < 12; i++) { int d = s.charAt(i) - '0'; sum += (i % 2 == 0) ? d : d * 3; } int chk = (10 - (sum % 10)) % 10; return chk == (s.charAt(12) - '0'); } catch (Throwable t) { return false; }
+    }
+    private static boolean checkEan8(String s) {
+        try { int sum = 0; for (int i = 0; i < 7; i++) { int d = s.charAt(i) - '0'; sum += (i % 2 == 0) ? d * 3 : d; } int chk = (10 - (sum % 10)) % 10; return chk == (s.charAt(7) - '0'); } catch (Throwable t) { return false; }
+    }
+    private static boolean checkUpca(String s) {
+        try { int sum = 0; for (int i = 0; i < 11; i++) { int d = s.charAt(i) - '0'; sum += (i % 2 == 0) ? d * 3 : d; } int chk = (10 - (sum % 10)) % 10; return chk == (s.charAt(11) - '0'); } catch (Throwable t) { return false; }
     }
 
     private static boolean hasActiveFilters() {

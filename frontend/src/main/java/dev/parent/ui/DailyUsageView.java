@@ -124,6 +124,7 @@ final class DailyUsageView extends MainWindow.BaseView {
 
     // camera preview widgets (togglable from Settings -> "show live preview")
     private StackPane camBox;
+    private volatile long lastPreviewMs;
 
     // -------------------------------------------------------------- constructor
 
@@ -170,11 +171,33 @@ final class DailyUsageView extends MainWindow.BaseView {
         ScanRouter.get().addStatusListener((running, msg) ->
                 cameraStatus.setText(running ? "LIVE - just show a code" : msg));
         dev.parent.scanner.CameraScanService.get().addFrameListener(jpeg -> {
-            javafx.scene.image.Image img =
-                    new javafx.scene.image.Image(new java.io.ByteArrayInputStream(jpeg));
-            if (!img.isError()) {
-                javafx.application.Platform.runLater(() -> camera.setImage(img));
-            }
+            // Only show preview when Daily Usage is actually on screen — avoids the
+            // "Medicines + Daily both scanning" confusion and saves CPU.
+            try {
+                dev.parent.ui.MainWindow w = dev.parent.ui.MainWindow.get();
+                if (w != null && !"daily".equals(w.currentViewKey())) return;
+                if (!dev.parent.config.AppConfig.get().cameraPreviewVisible()) return;
+            } catch (Throwable ignored) {}
+            long now = System.currentTimeMillis();
+            if (now - lastPreviewMs < 90) return;
+            lastPreviewMs = now;
+            // Show filtered preview so Settings sliders affect the WHOLE program (preview + ZXing)
+            Thread.ofVirtual().name("daily-preview").start(() -> {
+                try {
+                    java.awt.image.BufferedImage raw = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(jpeg));
+                    if (raw == null) return;
+                    java.awt.image.BufferedImage filtered = dev.parent.scanner.ImageFilters.applyForPreview(raw);
+                    javafx.scene.image.Image fx = javafx.embed.swing.SwingFXUtils.toFXImage(filtered, null);
+                    if (fx != null && !fx.isError()) {
+                        javafx.application.Platform.runLater(() -> camera.setImage(fx));
+                    }
+                } catch (Throwable t) {
+                    try {
+                        javafx.scene.image.Image img = new javafx.scene.image.Image(new java.io.ByteArrayInputStream(jpeg));
+                        if (!img.isError()) javafx.application.Platform.runLater(() -> camera.setImage(img));
+                    } catch (Throwable ignored2) {}
+                }
+            });
         });
         cameraStatus.textProperty().addListener((obs, o, n) ->
                 cameraStatus.setStyle(n != null && n.startsWith("LIVE")

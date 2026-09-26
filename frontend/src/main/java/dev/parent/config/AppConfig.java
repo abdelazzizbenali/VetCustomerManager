@@ -63,7 +63,7 @@ public final class AppConfig {
         props.setProperty(CAMERA_ALWAYS_ON, "true");
         props.setProperty(CAMERA_PROVIDER, "java");
         props.setProperty(CAMERA_PREVIEW, "true");
-        // Camera Lab defaults (Gemini: reduce resolution, boost contrast, ROI)
+        // Camera Lab defaults — conservative for accuracy (no downscale/TRY_HARDER unless user enables)
         props.setProperty(CAMERA_FILTER_BRIGHTNESS, "0");
         props.setProperty(CAMERA_FILTER_CONTRAST, "100");
         props.setProperty(CAMERA_FILTER_SATURATION, "100");
@@ -72,8 +72,8 @@ public final class AppConfig {
         props.setProperty(CAMERA_FILTER_INVERT, "false");
         props.setProperty(CAMERA_FILTER_ROI_ENABLED, "false");
         props.setProperty(CAMERA_FILTER_ROI_SIZE, "75");
-        props.setProperty(CAMERA_FILTER_TRY_HARDER, "true");
-        props.setProperty(CAMERA_FILTER_DOWNSCALE, "true");
+        props.setProperty(CAMERA_FILTER_TRY_HARDER, "false");
+        props.setProperty(CAMERA_FILTER_DOWNSCALE, "false");
         props.setProperty(CAMERA_FILTER_FORMATS, "CODE_128,CODE_39,EAN_13,EAN_8,UPC_A,UPC_E,QR_CODE");
         // owner's premium barcode license (built-in default; Settings can override)
         props.setProperty(DYNAMSOFT_LICENSE,
